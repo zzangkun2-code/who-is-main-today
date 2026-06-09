@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { HelpCircle, Images, KeyRound, MapPinned, Sparkles } from "lucide-react";
+import { FileText, HelpCircle, KeyRound, MapPinned, Sparkles } from "lucide-react";
+import { ActivityReportManager } from "@/components/activity/ActivityReportManager";
 import { ScheduleCalendar } from "@/components/calendar/ScheduleCalendar";
 import { ScheduleFormModal } from "@/components/calendar/ScheduleFormModal";
 import { SchoolInfoEditor } from "@/components/dashboard/SchoolInfoEditor";
 import { SchoolTabs } from "@/components/dashboard/SchoolTabs";
 import { FaqViewerModal } from "@/components/faq/FaqViewerModal";
-import { MediaManager } from "@/components/media/MediaManager";
 import { PasswordChangeModal } from "@/components/PasswordChangeModal";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -19,7 +19,7 @@ import type { CalendarDraft, ProgramType, ScheduleItem, SchoolProfile } from "@/
 export function UserDashboard({ profile }: { profile: SchoolProfile }) {
   const tabs = useMemo(() => BUSINESS_TABS[profile.businessType], [profile.businessType]);
   const [activeTab, setActiveTab] = useState<ProgramType>(tabs[0]);
-  const [view, setView] = useState<"calendar" | "media">("calendar");
+  const [view, setView] = useState<"calendar" | "activity">("calendar");
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [draft, setDraft] = useState<CalendarDraft | null>(null);
   const [editingItem, setEditingItem] = useState<ScheduleItem | null>(null);
@@ -92,11 +92,11 @@ export function UserDashboard({ profile }: { profile: SchoolProfile }) {
               FAQ
             </Button>
             <Button
-              variant={view === "media" ? "primary" : "secondary"}
-              icon={<Images className="h-4 w-4" />}
-              onClick={() => setView("media")}
+              variant={view === "activity" ? "primary" : "secondary"}
+              icon={<FileText className="h-4 w-4" />}
+              onClick={() => setView("activity")}
             >
-              미디어 제출
+              활동 기록 제출
             </Button>
           </div>
         </div>
@@ -137,8 +137,12 @@ export function UserDashboard({ profile }: { profile: SchoolProfile }) {
         </div>
       ) : null}
 
-      {view === "media" ? (
-        <MediaManager profile={profile} type={activeTab} onBack={() => setView("calendar")} />
+      {view === "activity" ? (
+        <ActivityReportManager
+          profile={profile}
+          type={activeTab}
+          onBack={() => setView("calendar")}
+        />
       ) : (
         <ScheduleCalendar
           type={activeTab}

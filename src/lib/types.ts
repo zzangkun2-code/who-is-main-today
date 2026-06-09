@@ -35,6 +35,7 @@ export type SchoolProfile = {
   schoolLevel: SchoolLevel;
   isFirstLogin?: boolean;
   mustChangePassword?: boolean;
+  activityReports?: Partial<Record<ProgramType, ActivityReport>>;
   createdBy?: string;
   createdAt?: unknown;
   updatedAt?: unknown;
@@ -78,21 +79,8 @@ export type ScheduleItem = {
   updatedAt?: unknown;
 };
 
-export type MediaItem = {
-  id?: string;
-  ownerUid: string;
-  type: ProgramType;
-  url: string;
-  storagePath: string;
-  fileName: string;
-  size: number;
-  createdAt?: unknown;
-};
-
-export type VideoLinks = {
-  id?: string;
-  ownerUid: string;
-  urls: string[];
+export type ActivityReport = {
+  content: string;
   updatedAt?: unknown;
 };
 
@@ -119,4 +107,10 @@ export type SchoolAccountCreateInput = {
   initialPassword: string;
   schoolName: string;
   businessType: BusinessType;
+};
+
+export type SchoolAccountUpdateInput = {
+  uid: string;
+  schoolName?: string;
+  newPassword?: string;
 };

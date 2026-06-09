@@ -71,9 +71,9 @@ export function LoginScreen() {
       <section className="w-full max-w-4xl">
         <div className="mb-7 text-center">
           <img
-            src="/jeonbuk-office-logo.svg"
+            src="/jeonbuk-office-logo.png"
             alt="전북특별자치도교육청"
-            className="mx-auto h-24 w-auto rounded-card bg-white p-2 shadow-soft"
+            className="mx-auto h-20 w-auto rounded-card bg-white px-4 py-3 shadow-soft sm:h-24"
           />
           <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-white/75 px-4 py-2 text-sm font-extrabold text-mint-700 shadow-soft">
             <Sparkles className="h-4 w-4" />

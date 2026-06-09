@@ -13,10 +13,9 @@ npm run dev
 
 - Next.js / React / TypeScript
 - Tailwind CSS
-- Firebase Auth, Firestore, Storage
+- Firebase Auth, Firestore
 - Firebase Admin SDK
 - FullCalendar
-- browser-image-compression
 - lucide-react
 
 ## 디렉토리 구조
@@ -35,7 +34,10 @@ src/
       FaqManager.tsx
       SchoolAccountManager.tsx
       SchoolCard.tsx
+    activity/
+      ActivityReportManager.tsx
     calendar/
+      ScheduleDetailModal.tsx
       ScheduleCalendar.tsx
       ScheduleFormModal.tsx
     dashboard/
@@ -43,8 +45,6 @@ src/
       UserDashboard.tsx
     faq/
       FaqViewerModal.tsx
-    media/
-      MediaManager.tsx
     ui/
     AppRouter.tsx
     AuthProvider.tsx
@@ -58,13 +58,11 @@ src/
     firebase-admin.ts
     firebase.ts
     firestore.ts
-    media.ts
     types.ts
     utils.ts
 docs/
   firebase-schema.md
 firestore.rules
-storage.rules
 ```
 
 ## Firebase 설정
@@ -75,7 +73,7 @@ storage.rules
 cp .env.example .env.local
 ```
 
-Firebase Console에서 Email/Password 로그인을 활성화하고, Firestore와 Storage를 생성합니다.
+Firebase Console에서 Email/Password 로그인을 활성화하고 Firestore를 생성합니다.
 
 관리자 준비 순서:
 
@@ -93,8 +91,14 @@ Firebase Console에서 Email/Password 로그인을 활성화하고, Firestore와
 
 학교는 로그인 화면에서 `26e01`만 입력합니다. 앱이 내부적으로 `26e01@exchange.jbe.kr`로 바꿔 Firebase Auth에 로그인합니다.
 
+활동 기록 구조:
+
+- 참여학교는 각 사업 탭에서 활동 내용, 학생 소감, 학습 결과를 텍스트로 제출합니다.
+- 활동 기록은 `schools/{학교 UID}` 문서의 `activityReports` 필드에 저장됩니다.
+- 관리자는 학교 관리 화면의 `활동 기록` 탭에서 제출 내용을 읽기 전용으로 확인합니다.
+
 보안 구조:
 
-- 참여학교는 `schools/{본인 UID}`와 그 하위 일정/미디어만 읽고 씁니다.
+- 참여학교는 `schools/{본인 UID}`와 그 하위 일정만 읽고 씁니다.
 - 참여학교는 `faqs` 컬렉션을 읽기만 할 수 있습니다.
-- `admins/{관리자 UID}` 문서가 있는 관리자 계정은 모든 컬렉션과 Storage 파일에 대한 전체 권한을 가집니다.
+- `admins/{관리자 UID}` 문서가 있는 관리자 계정은 Firestore 전체 권한을 가집니다.

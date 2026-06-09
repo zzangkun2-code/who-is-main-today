@@ -1,5 +1,5 @@
 import { requireAuth } from "@/lib/firebase";
-import type { SchoolAccountCreateInput } from "@/lib/types";
+import type { SchoolAccountCreateInput, SchoolAccountUpdateInput } from "@/lib/types";
 
 async function authedFetch(path: string, body: unknown) {
   const currentUser = requireAuth().currentUser;
@@ -42,6 +42,20 @@ export async function resetSchoolPassword(input: {
   newPassword: string;
 }) {
   return authedFetch("/api/reset-password", input) as Promise<{
+    uid: string;
+    ok: boolean;
+  }>;
+}
+
+export async function updateSchoolAccount(input: SchoolAccountUpdateInput) {
+  return authedFetch("/api/update-school-account", input) as Promise<{
+    uid: string;
+    ok: boolean;
+  }>;
+}
+
+export async function deleteSchoolAccount(uid: string) {
+  return authedFetch("/api/delete-school-account", { uid }) as Promise<{
     uid: string;
     ok: boolean;
   }>;

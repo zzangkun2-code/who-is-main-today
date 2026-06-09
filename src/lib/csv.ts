@@ -1,6 +1,6 @@
 import { BUSINESS_OPTIONS, PROGRAMS, PROGRAM_ORDER } from "@/lib/constants";
 import { countriesToText, normalizeCountries } from "@/lib/country-data";
-import type { CountrySelection, ScheduleItem, SchoolProfile, VideoLinks } from "@/lib/types";
+import type { CountrySelection, ScheduleItem, SchoolProfile } from "@/lib/types";
 
 function escapeCsv(value: string | number) {
   const text = String(value ?? "");
@@ -21,11 +21,7 @@ export function getScheduleCountries(item: ScheduleItem): CountrySelection[] {
   return normalizeCountries(payload.invitedCountry);
 }
 
-export function downloadSchoolStatsCsv(
-  schools: SchoolProfile[],
-  schedules: ScheduleItem[],
-  videoLinks: VideoLinks[] = []
-) {
+export function downloadSchoolStatsCsv(schools: SchoolProfile[], schedules: ScheduleItem[]) {
   const headers = [
     "학교ID",
     "학교명",
@@ -36,7 +32,9 @@ export function downloadSchoolStatsCsv(
     "운영주제",
     "사업 유형",
     "교류국가",
-    "동영상 링크",
+    "온라인수업 활동 기록",
+    "해외현장체험학습 활동 기록",
+    "초청수업 활동 기록",
     "온라인수업 일정 수",
     "해외현장체험학습 일정 수",
     "초청수업 일정 수",
@@ -55,7 +53,6 @@ export function downloadSchoolStatsCsv(
     const businessLabel =
       BUSINESS_OPTIONS.find((option) => option.value === school.businessType)?.label ??
       school.businessType;
-    const links = videoLinks.find((item) => item.ownerUid === school.uid)?.urls.filter(Boolean) ?? [];
 
     return [
       school.schoolId,
@@ -67,7 +64,9 @@ export function downloadSchoolStatsCsv(
       school.theme,
       businessLabel,
       countriesToText(countries),
-      links.join(" | "),
+      school.activityReports?.online?.content ?? "",
+      school.activityReports?.fieldTrip?.content ?? "",
+      school.activityReports?.invitation?.content ?? "",
       ...counts,
       latest
     ];

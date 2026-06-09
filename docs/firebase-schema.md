@@ -28,6 +28,20 @@ Firebase Authentication에서 만든 교육청 관리자 계정의 권한 문서
   schoolLevel: "초등학교" | "중학교" | "고등학교";
   partnerInfo: string;
   theme: string;
+  activityReports: {
+    online?: {
+      content: string;
+      updatedAt: Timestamp;
+    };
+    fieldTrip?: {
+      content: string;
+      updatedAt: Timestamp;
+    };
+    invitation?: {
+      content: string;
+      updatedAt: Timestamp;
+    };
+  };
   isFirstLogin: boolean;
   mustChangePassword: boolean;
   createdBy: string;
@@ -69,31 +83,26 @@ Firebase Authentication에서 만든 교육청 관리자 계정의 권한 문서
 }
 ```
 
-## `schools/{uid}/media/{mediaId}`
+## `schools/{uid}.activityReports`
 
-이미지 제출 내역입니다.
-
-```ts
-{
-  ownerUid: string;
-  type: "online" | "fieldTrip" | "invitation";
-  url: string;
-  storagePath: string;
-  fileName: string;
-  size: number;
-  createdAt: Timestamp;
-}
-```
-
-## `schools/{uid}/videoLinks/online`
-
-온라인수업 동영상 링크입니다.
+학교가 제출하는 텍스트 기반 활동 기록입니다. 수업 활동 내용, 소감, 학습 결과를 사업 탭별로 저장합니다.
 
 ```ts
 {
-  ownerUid: string;
-  urls: string[];
-  updatedAt: Timestamp;
+  activityReports: {
+    online?: {
+      content: string;
+      updatedAt: Timestamp;
+    };
+    fieldTrip?: {
+      content: string;
+      updatedAt: Timestamp;
+    };
+    invitation?: {
+      content: string;
+      updatedAt: Timestamp;
+    };
+  };
 }
 ```
 

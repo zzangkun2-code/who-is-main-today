@@ -13,13 +13,11 @@ import {
 } from "firebase/firestore";
 import { requireDb } from "@/lib/firebase";
 import type {
-  MediaItem,
   FaqCategory,
   FaqItem,
   ProgramType,
   ScheduleItem,
-  SchoolProfile,
-  VideoLinks
+  SchoolProfile
 } from "@/lib/types";
 
 type ErrorHandler = (error: Error) => void;
@@ -142,105 +140,14 @@ export function subscribeSchools(
   );
 }
 
-export function subscribeMedia(
-  uid: string,
-  type: ProgramType,
-  onChange: (items: MediaItem[]) => void,
-  onError?: ErrorHandler
-): Unsubscribe {
-  return onSnapshot(
-    collection(requireDb(), "schools", uid, "media"),
-    (snapshot) => {
-      onChange(
-        snapshot.docs
-          .map((item) => ({ id: item.id, ...item.data() }) as MediaItem)
-          .filter((item) => item.type === type)
-          .reverse()
-      );
-    },
-    onError
-  );
-}
-
-export async function addMediaItem(uid: string, item: MediaItem) {
-  await addDoc(collection(requireDb(), "schools", uid, "media"), {
-    ...item,
-    createdAt: serverTimestamp()
-  });
-}
-
-export async function deleteMediaItemDoc(uid: string, mediaId: string) {
-  await deleteDoc(doc(requireDb(), "schools", uid, "media", mediaId));
-}
-
-export function subscribeSchoolMedia(
-  uid: string,
-  onChange: (items: MediaItem[]) => void,
-  onError?: ErrorHandler
-): Unsubscribe {
-  return onSnapshot(
-    collection(requireDb(), "schools", uid, "media"),
-    (snapshot) => {
-      onChange(snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as MediaItem));
-    },
-    onError
-  );
-}
-
-export function subscribeAllMedia(
-  onChange: (items: MediaItem[]) => void,
-  onError?: ErrorHandler
-): Unsubscribe {
-  return onSnapshot(
-    collectionGroup(requireDb(), "media"),
-    (snapshot) => {
-      onChange(snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as MediaItem));
-    },
-    onError
-  );
-}
-
-export function subscribeVideoLinks(
-  uid: string,
-  onChange: (links: VideoLinks) => void,
-  onError?: ErrorHandler
-): Unsubscribe {
-  return onSnapshot(
-    doc(requireDb(), "schools", uid, "videoLinks", "online"),
-    (snapshot) => {
-      onChange(
-        snapshot.exists()
-          ? ({ ownerUid: uid, ...snapshot.data() } as VideoLinks)
-          : { ownerUid: uid, urls: ["", "", "", "", ""] }
-      );
-    },
-    onError
-  );
-}
-
-export async function saveVideoLinks(uid: string, urls: string[]) {
-  await setDoc(
-    doc(requireDb(), "schools", uid, "videoLinks", "online"),
-    {
-      ownerUid: uid,
-      urls: urls.slice(0, 5),
+export async function saveActivityReport(uid: string, type: ProgramType, content: string) {
+  await updateDoc(doc(requireDb(), "schools", uid), {
+    [`activityReports.${type}`]: {
+      content,
       updatedAt: serverTimestamp()
     },
-    { merge: true }
-  );
-}
-
-export function subscribeAllVideoLinks(
-  onChange: (links: VideoLinks[]) => void,
-  onError?: ErrorHandler
-): Unsubscribe {
-  return onSnapshot(
-    collectionGroup(requireDb(), "videoLinks"),
-    (snapshot) => {
-      onChange(snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as VideoLinks));
-    },
-    onError
-  );
+    updatedAt: serverTimestamp()
+  });
 }
 
 export function subscribeFaqs(

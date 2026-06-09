@@ -15,7 +15,6 @@
     "@fullcalendar/interaction": "^6.1.15",
     "@fullcalendar/react": "^6.1.15",
     "@fullcalendar/timegrid": "^6.1.15",
-    "browser-image-compression": "^2.0.2",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
     "firebase": "^10.14.1",

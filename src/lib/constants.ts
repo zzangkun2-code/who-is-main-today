@@ -61,7 +61,7 @@ export const PROGRAMS: Record<
     color: "text-skysoft-700",
     bg: "bg-skysoft-50",
     chip: "bg-skysoft-100 text-skysoft-700",
-    eventColor: "#62aef4"
+    eventColor: "#AED9E0"
   },
   fieldTrip: {
     label: "해외현장체험학습",
@@ -101,7 +101,7 @@ export const ROLE_CARDS = [
   {
     role: "school" as const,
     title: "참여학교",
-    subtitle: "일정과 미디어 제출",
+    subtitle: "일정과 활동 기록 제출",
     icon: UsersRound,
     className: "from-pinkwarm-100 to-peach-100 text-pinkwarm-700"
   }

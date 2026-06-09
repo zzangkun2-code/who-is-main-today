@@ -5,22 +5,20 @@ import {
   BarChart3,
   CalendarDays,
   Download,
+  FileText,
   HelpCircle,
-  Images,
   KeyRound,
-  ListChecks,
-  School2
+  ListChecks
 } from "lucide-react";
+import { ActivityReportManager } from "@/components/activity/ActivityReportManager";
 import { AdminCalendar } from "@/components/admin/AdminCalendar";
 import { AdminStats } from "@/components/admin/AdminStats";
 import { FaqManager } from "@/components/admin/FaqManager";
-import { ImageGalleryModal } from "@/components/admin/ImageGalleryModal";
 import { SchoolAccountManager } from "@/components/admin/SchoolAccountManager";
 import { SchoolCard } from "@/components/admin/SchoolCard";
 import { ScheduleCalendar } from "@/components/calendar/ScheduleCalendar";
 import { ScheduleFormModal } from "@/components/calendar/ScheduleFormModal";
 import { SchoolTabs } from "@/components/dashboard/SchoolTabs";
-import { MediaManager } from "@/components/media/MediaManager";
 import { Badge, StatusBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { StaticCard } from "@/components/ui/Card";
@@ -30,33 +28,26 @@ import { downloadSchoolStatsCsv } from "@/lib/csv";
 import {
   deleteSchedule,
   subscribeAllSchedules,
-  subscribeAllVideoLinks,
-  subscribeSchoolMedia,
   subscribeSchools,
   upsertSchedule
 } from "@/lib/firestore";
 import type {
   CalendarDraft,
-  MediaItem,
   ProgramType,
   ScheduleItem,
-  SchoolProfile,
-  VideoLinks
+  SchoolProfile
 } from "@/lib/types";
 
 type AdminView = "stats" | "schools" | "calendar" | "accounts" | "faq";
-type DetailView = "schedule" | "media";
+type DetailView = "schedule" | "activity";
 
 export function AdminDashboard() {
   const [schools, setSchools] = useState<SchoolProfile[]>([]);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
-  const [videoLinks, setVideoLinks] = useState<VideoLinks[]>([]);
   const [selectedUid, setSelectedUid] = useState<string | null>(null);
-  const [selectedMedia, setSelectedMedia] = useState<MediaItem[]>([]);
   const [view, setView] = useState<AdminView>("stats");
   const [detailView, setDetailView] = useState<DetailView>("schedule");
   const [activeTab, setActiveTab] = useState<ProgramType>("online");
-  const [galleryOpen, setGalleryOpen] = useState(false);
   const [draft, setDraft] = useState<CalendarDraft | null>(null);
   const [editingItem, setEditingItem] = useState<ScheduleItem | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -74,29 +65,10 @@ export function AdminDashboard() {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = subscribeAllVideoLinks(setVideoLinks, (linkError) =>
-      setError(linkError.message)
-    );
-    return unsubscribe;
-  }, []);
-
-  useEffect(() => {
     if (!selectedUid && schools.length) {
       setSelectedUid(schools[0].uid);
     }
   }, [schools, selectedUid]);
-
-  useEffect(() => {
-    if (!selectedUid) {
-      setSelectedMedia([]);
-      return undefined;
-    }
-
-    const unsubscribe = subscribeSchoolMedia(selectedUid, setSelectedMedia, (mediaError) =>
-      setError(mediaError.message)
-    );
-    return unsubscribe;
-  }, [selectedUid]);
 
   const selectedSchool = useMemo(
     () => schools.find((school) => school.uid === selectedUid) ?? null,
@@ -124,6 +96,13 @@ export function AdminDashboard() {
     );
   }, 0);
 
+  const activityReportCount = schools.reduce(
+    (count, school) =>
+      count +
+      Object.values(school.activityReports ?? {}).filter((report) => report?.content?.trim()).length,
+    0
+  );
+
   const navButtons = [
     { view: "stats" as const, label: "통계", icon: BarChart3 },
     { view: "schools" as const, label: "학교 관리", icon: ListChecks },
@@ -134,21 +113,23 @@ export function AdminDashboard() {
 
   return (
     <div className="mx-auto grid max-w-7xl gap-4">
-      <StaticCard className="p-5 sm:p-6">
-        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-          <div className="flex items-start gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-skysoft-100 text-skysoft-700">
-              <School2 className="h-7 w-7" />
-            </div>
-            <div>
+      <StaticCard className="p-4 sm:p-5">
+        <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
+          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
+            <img
+              src="/jeonbuk-office-logo.png"
+              alt="전북특별자치도교육청"
+              className="h-12 w-fit rounded-card bg-white px-3 py-2 shadow-soft sm:h-14"
+            />
+            <div className="min-w-0">
               <p className="text-sm font-extrabold text-mint-700">교육청 관리자</p>
-              <h1 className="text-2xl font-black text-ink-900 sm:text-3xl">
-                국제교류수업사업 통합 관리
+              <h1 className="whitespace-nowrap text-lg font-black leading-tight text-ink-900 sm:text-xl">
+                국제교류수업사업 통합관리
               </h1>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Badge tone="blue">학교 {schools.length}</Badge>
                 <Badge tone="mint">일정 {schedules.length}</Badge>
-                <Badge tone="peach">이미지 {selectedMedia.length}</Badge>
+                <Badge tone="peach">활동 기록 {activityReportCount}</Badge>
                 <Badge tone={missingCount ? "danger" : "peach"}>미입력 {missingCount}</Badge>
               </div>
             </div>
@@ -171,7 +152,7 @@ export function AdminDashboard() {
             <Button
               variant="secondary"
               icon={<Download className="h-4 w-4" />}
-              onClick={() => downloadSchoolStatsCsv(schools, schedules, videoLinks)}
+              onClick={() => downloadSchoolStatsCsv(schools, schedules)}
             >
               CSV 다운로드
             </Button>
@@ -230,18 +211,11 @@ export function AdminDashboard() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button
-                      variant={detailView === "media" ? "primary" : "secondary"}
-                      icon={<Images className="h-4 w-4" />}
-                      onClick={() => setDetailView("media")}
+                      variant={detailView === "activity" ? "primary" : "secondary"}
+                      icon={<FileText className="h-4 w-4" />}
+                      onClick={() => setDetailView("activity")}
                     >
-                      미디어 관리
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      icon={<Images className="h-4 w-4" />}
-                      onClick={() => setGalleryOpen(true)}
-                    >
-                      이미지 갤러리
+                      활동 기록
                     </Button>
                   </div>
                 </div>
@@ -269,11 +243,12 @@ export function AdminDashboard() {
                 </div>
               </StaticCard>
 
-              {detailView === "media" ? (
-                <MediaManager
+              {detailView === "activity" ? (
+                <ActivityReportManager
                   profile={selectedSchool}
                   type={activeTab}
                   onBack={() => setDetailView("schedule")}
+                  readOnly
                 />
               ) : (
                 <ScheduleCalendar
@@ -312,12 +287,6 @@ export function AdminDashboard() {
             onDelete={(item) =>
               item.id ? deleteSchedule(selectedSchool.uid, item.id) : Promise.resolve()
             }
-          />
-          <ImageGalleryModal
-            open={galleryOpen}
-            onClose={() => setGalleryOpen(false)}
-            school={selectedSchool}
-            media={selectedMedia}
           />
         </>
       ) : null}

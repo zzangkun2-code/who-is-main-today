@@ -23,6 +23,7 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
         "partnerInfo",
         "theme",
+        "activityReports",
         "isFirstLogin",
         "mustChangePassword",
         "updatedAt"
@@ -55,39 +56,9 @@ service cloud.firestore {
           || (isOwner(schoolId) && resource.data.ownerUid == request.auth.uid);
       }
 
-      match /media/{mediaId} {
-        allow read: if isOwner(schoolId) || isAdmin();
-        allow create: if validProgramType(request.resource.data.type)
-          && (
-            isAdmin()
-            || (isOwner(schoolId) && request.resource.data.ownerUid == request.auth.uid)
-          );
-        allow update, delete: if isAdmin()
-          || (isOwner(schoolId) && resource.data.ownerUid == request.auth.uid);
-      }
-
-      match /videoLinks/{docId} {
-        allow read: if isOwner(schoolId) || isAdmin();
-        allow create, update: if request.resource.data.urls is list
-          && request.resource.data.urls.size() <= 5
-          && (
-            isAdmin()
-            || (isOwner(schoolId) && request.resource.data.ownerUid == request.auth.uid)
-          );
-        allow delete: if isAdmin()
-          || (isOwner(schoolId) && resource.data.ownerUid == request.auth.uid);
-      }
     }
 
     match /{path=**}/schedules/{scheduleId} {
-      allow read: if isAdmin();
-    }
-
-    match /{path=**}/media/{mediaId} {
-      allow read: if isAdmin();
-    }
-
-    match /{path=**}/videoLinks/{docId} {
       allow read: if isAdmin();
     }
 

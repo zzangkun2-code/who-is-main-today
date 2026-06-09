@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import dynamic from "next/dynamic";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
@@ -8,11 +9,12 @@ import type { DateSelectArg, EventClickArg, EventInput } from "@fullcalendar/cor
 import type { DateClickArg } from "@fullcalendar/interaction";
 import koLocale from "@fullcalendar/core/locales/ko";
 import { Plus } from "lucide-react";
+import { ScheduleDetailModal } from "@/components/calendar/ScheduleDetailModal";
+import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { PROGRAMS } from "@/lib/constants";
 import type { CalendarDraft, ProgramType, ScheduleItem } from "@/lib/types";
 import { addDays } from "@/lib/utils";
-import { Button } from "@/components/ui/Button";
-import { EmptyState } from "@/components/ui/EmptyState";
 
 const FullCalendar = dynamic(() => import("@fullcalendar/react"), {
   ssr: false
@@ -24,13 +26,13 @@ function buildEvents(schedules: ScheduleItem[]): EventInput[] {
     const allDay = item.type !== "online";
     return {
       id: item.id,
-      title: item.title,
+      title: item.schoolName,
       start: item.start,
       end: allDay ? addDays(item.end, 1) : item.start,
       allDay,
       backgroundColor: program.eventColor,
       borderColor: program.eventColor,
-      textColor: "#ffffff",
+      textColor: item.type === "online" ? "#172033" : "#ffffff",
       extendedProps: { item }
     };
   });
@@ -49,6 +51,7 @@ export function ScheduleCalendar({
 }) {
   const program = PROGRAMS[type];
   const Icon = program.icon;
+  const [detailItem, setDetailItem] = useState<ScheduleItem | null>(null);
 
   return (
     <section className="grid gap-4">
@@ -59,7 +62,9 @@ export function ScheduleCalendar({
           </div>
           <div>
             <h2 className="text-xl font-black text-ink-900">{program.label}</h2>
-            <p className="text-sm font-bold text-slate-500">날짜를 선택해 일정을 입력합니다</p>
+            <p className="text-sm font-bold text-slate-500">
+              날짜를 선택해 일정을 입력하고, 등록된 일정은 클릭해서 상세 정보를 확인하세요.
+            </p>
           </div>
         </div>
         <Button
@@ -108,17 +113,26 @@ export function ScheduleCalendar({
               end: type === "online" ? start : inclusiveEnd
             });
           }}
-          eventClick={(info: EventClickArg) =>
-            onEdit(info.event.extendedProps.item as ScheduleItem)
-          }
+          eventClick={(info: EventClickArg) => {
+            setDetailItem(info.event.extendedProps.item as ScheduleItem);
+          }}
         />
       </div>
 
       {schedules.length === 0 ? (
         <EmptyState title="아직 등록된 일정이 없습니다">
-          <span>{program.label} 날짜를 선택해 첫 일정을 저장하세요.</span>
+          <span>{program.label} 날짜를 선택해 첫 일정을 저장해 보세요.</span>
         </EmptyState>
       ) : null}
+
+      <ScheduleDetailModal
+        item={detailItem}
+        onClose={() => setDetailItem(null)}
+        onEdit={(item) => {
+          setDetailItem(null);
+          onEdit(item);
+        }}
+      />
     </section>
   );
 }
