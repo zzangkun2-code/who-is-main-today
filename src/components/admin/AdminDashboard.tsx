@@ -122,7 +122,7 @@ export function AdminDashboard() {
             <img
               src="/logo.png"
               alt="앱 로고"
-              className="h-12 w-fit rounded-card bg-white px-3 py-2 shadow-soft sm:h-14"
+              className="h-auto max-h-24 w-full max-w-md rounded-card bg-white object-contain px-3 py-2 shadow-soft"
             />
             <div className="min-w-0">
               <div className="flex flex-wrap gap-2">

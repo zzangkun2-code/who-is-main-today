@@ -73,7 +73,7 @@ export function LoginScreen() {
           <img
             src="/logo.png"
             alt="앱 로고"
-            className="mx-auto h-20 w-auto rounded-card bg-white px-4 py-3 shadow-soft sm:h-24"
+            className="mx-auto h-auto max-h-56 w-full max-w-3xl rounded-card bg-white object-contain px-4 py-3 shadow-soft"
           />
         </div>
 
