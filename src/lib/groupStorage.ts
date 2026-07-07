@@ -5,7 +5,8 @@ import {
   getDoc,
   getDocs,
   setDoc,
-  writeBatch
+  writeBatch,
+  type Firestore
 } from "firebase/firestore";
 import { getDefaultAvatarId, isAvatarIdForGender } from "@/lib/avatar";
 import { db } from "@/lib/firebase";
@@ -24,46 +25,71 @@ const LEGACY_MEMBER_KEYS = [
 ];
 
 /**
- * 저장 계층은 Firestore를 우선 사용하고, Firebase 환경변수 누락이나 권한 오류가
- * 있을 때만 기존 localStorage 저장소를 fallback으로 사용합니다.
+ * Firestore가 기본 저장소입니다.
+ * localStorage는 Firestore 저장 성공 후 같은 브라우저에 복사해두는 백업 캐시와
+ * 과거 localStorage 후보 복구 용도로만 사용합니다.
  *
- * 보안 메모:
- * 현재는 클라이언트 앱만으로 그룹방을 만들기 때문에 비밀번호 검증도 클라이언트에서
- * 처리합니다. 운영 보안을 높이려면 Next.js API route/Firebase Functions에서
- * 서버 전용 salt와 느린 해시 알고리즘으로 passwordHash를 생성·검증하세요.
+ * 중요: Firestore 초기화/권한/네트워크 오류가 발생하면 localStorage로 조용히
+ * 넘어가지 않고 console.error와 예외로 드러냅니다. 그래야 다른 기기에서 공유되지
+ * 않는 문제를 바로 발견할 수 있습니다.
  */
 
 function nowIso() {
   return new Date().toISOString();
 }
 
-export function normalizeRoomNumber(value: string) {
-  return value.replace(/\D/g, "").slice(0, 12);
+export function normalizeRoomNumber(value: unknown) {
+  return String(value ?? "").trim().replace(/\D/g, "").slice(0, 12);
+}
+
+function normalizePassword(value: unknown) {
+  return String(value ?? "").trim();
 }
 
 function roomMembersKey(roomNumber: string) {
   return `${GROUP_MEMBERS_KEY_PREFIX}${normalizeRoomNumber(roomNumber)}`;
 }
 
-function roomDocRef(roomNumber: string) {
-  if (!db) return null;
-  return doc(db, "groupRooms", normalizeRoomNumber(roomNumber));
+function requireFirestore(operation: string): Firestore {
+  if (!db) {
+    const error = new Error(
+      `${operation}: Firebase Firestore가 초기화되지 않았습니다. NEXT_PUBLIC_FIREBASE_* 환경변수를 확인해주세요.`
+    );
+    console.error("[Firestore]", error.message);
+    throw error;
+  }
+  return db;
 }
 
-function membersCollectionRef(roomNumber: string) {
-  if (!db) return null;
-  return collection(db, "groupRooms", normalizeRoomNumber(roomNumber), "members");
+function roomDocRef(database: Firestore, roomNumber: string) {
+  return doc(database, "groupRooms", normalizeRoomNumber(roomNumber));
 }
 
-function memberDocRef(roomNumber: string, memberId: string) {
-  if (!db) return null;
+function membersCollectionRef(database: Firestore, roomNumber: string) {
+  return collection(
+    database,
+    "groupRooms",
+    normalizeRoomNumber(roomNumber),
+    "members"
+  );
+}
+
+function memberDocRef(database: Firestore, roomNumber: string, memberId: string) {
   return doc(
-    db,
+    database,
     "groupRooms",
     normalizeRoomNumber(roomNumber),
     "members",
     memberId
   );
+}
+
+function throwFirestoreError(operation: string, error: unknown): never {
+  console.error(`[Firestore] ${operation} 실패`, error);
+  if (error instanceof Error) {
+    throw new Error(`${operation} 중 Firebase 오류가 발생했습니다: ${error.message}`);
+  }
+  throw new Error(`${operation} 중 Firebase 오류가 발생했습니다.`);
 }
 
 function getLocalRooms() {
@@ -72,6 +98,14 @@ function getLocalRooms() {
 
 function saveLocalRooms(rooms: GroupRoom[]) {
   return writeJson(GROUP_ROOMS_KEY, rooms);
+}
+
+function rememberLocalRoom(room: GroupRoom) {
+  const rooms = getLocalRooms();
+  saveLocalRooms([
+    ...rooms.filter((item) => item.roomNumber !== room.roomNumber),
+    room
+  ]);
 }
 
 function normalizeGender(value: unknown): Gender {
@@ -132,10 +166,11 @@ function normalizeMember(
 
   if (!name || !birthDate || !birthTime) return null;
 
+  const normalizedRoomNumber = normalizeRoomNumber(roomNumber);
   const id =
     typeof record.id === "string" && record.id.trim()
-      ? record.id
-      : `${roomNumber}-${name}-${birthDate}-${birthTime}-${index}`;
+      ? record.id.trim()
+      : `${normalizedRoomNumber}-${name}-${birthDate}-${birthTime}-${index}`;
   const avatarId = isAvatarIdForGender(record.avatarId, gender)
     ? record.avatarId
     : getDefaultAvatarId(
@@ -145,7 +180,7 @@ function normalizeMember(
 
   return {
     id,
-    roomNumber,
+    roomNumber: normalizedRoomNumber,
     name,
     gender,
     birthDate,
@@ -161,15 +196,13 @@ function normalizeMember(
 function normalizeRoom(raw: unknown): GroupRoom | null {
   if (!raw || typeof raw !== "object") return null;
   const record = raw as Record<string, unknown>;
-  const roomNumber =
-    typeof record.roomNumber === "string"
-      ? normalizeRoomNumber(record.roomNumber)
-      : "";
+  const roomNumber = normalizeRoomNumber(record.roomNumber);
   if (!roomNumber) return null;
 
   return {
     roomNumber,
-    password: typeof record.password === "string" ? record.password : undefined,
+    password:
+      typeof record.password === "string" ? record.password.trim() : undefined,
     passwordHash:
       typeof record.passwordHash === "string" ? record.passwordHash : undefined,
     createdAt:
@@ -249,15 +282,14 @@ function readLegacyMembers(roomNumber: string) {
 }
 
 async function hashRoomPassword(roomNumber: string, password: string) {
-  const source = `${normalizeRoomNumber(roomNumber)}:${password}`;
+  const source = `${normalizeRoomNumber(roomNumber)}:${normalizePassword(password)}`;
 
   if (typeof crypto !== "undefined" && crypto.subtle) {
     const bytes = new TextEncoder().encode(source);
     const digest = await crypto.subtle.digest("SHA-256", bytes);
-    const hash = Array.from(new Uint8Array(digest))
+    return `client-sha256:${Array.from(new Uint8Array(digest))
       .map((byte) => byte.toString(16).padStart(2, "0"))
-      .join("");
-    return `client-sha256:${hash}`;
+      .join("")}`;
   }
 
   let value = 2166136261;
@@ -268,179 +300,140 @@ async function hashRoomPassword(roomNumber: string, password: string) {
   return `client-fnv1a:${(value >>> 0).toString(16)}`;
 }
 
-async function passwordMatches(room: GroupRoom, roomNumber: string, password: string) {
+async function passwordMatches(
+  room: GroupRoom,
+  roomNumber: string,
+  password: string
+) {
+  const cleanPassword = normalizePassword(password);
+
   if (room.passwordHash) {
-    return room.passwordHash === (await hashRoomPassword(roomNumber, password));
+    return room.passwordHash === (await hashRoomPassword(roomNumber, cleanPassword));
   }
 
-  return room.password === password;
+  return normalizePassword(room.password) === cleanPassword;
 }
 
-function rememberLocalRoom(room: GroupRoom) {
-  const rooms = getLocalRooms();
-  const nextRooms = [
-    ...rooms.filter((item) => item.roomNumber !== room.roomNumber),
-    room
-  ];
-  saveLocalRooms(nextRooms);
-}
-
-function warnFirestoreFallback(error: unknown) {
-  if (process.env.NODE_ENV !== "production") {
-    console.warn("Firestore 저장소를 사용할 수 없어 localStorage로 fallback합니다.", error);
-  }
-}
-
-async function getFirestoreRoom(roomNumber: string) {
-  const ref = roomDocRef(roomNumber);
-  if (!ref) return null;
-  const snapshot = await getDoc(ref);
+async function getFirestoreRoom(database: Firestore, roomNumber: string) {
+  const snapshot = await getDoc(roomDocRef(database, roomNumber));
   return snapshot.exists() ? normalizeRoom(snapshot.data()) : null;
 }
 
-async function getFirestoreMembers(roomNumber: string) {
+async function getFirestoreMembers(database: Firestore, roomNumber: string) {
   const normalized = normalizeRoomNumber(roomNumber);
-  const ref = membersCollectionRef(normalized);
-  if (!ref) return null;
+  const snapshot = await getDocs(membersCollectionRef(database, normalized));
 
-  const snapshot = await getDocs(ref);
   return snapshot.docs
     .map((memberDoc, index) =>
-      normalizeMember(
-        { id: memberDoc.id, ...memberDoc.data() },
-        normalized,
-        index
-      )
+      normalizeMember({ id: memberDoc.id, ...memberDoc.data() }, normalized, index)
     )
-    .filter((member): member is Member => Boolean(member));
+    .filter((member): member is Member => Boolean(member))
+    .sort((a, b) => {
+      if (a.createdAt !== b.createdAt) return a.createdAt.localeCompare(b.createdAt);
+      return a.name.localeCompare(b.name, "ko");
+    });
 }
 
 export async function checkRoomNumberAvailable(roomNumber: string) {
   const normalized = normalizeRoomNumber(roomNumber);
   if (!normalized) return false;
 
-  try {
-    if (db) {
-      return !(await getFirestoreRoom(normalized));
-    }
-  } catch (error) {
-    warnFirestoreFallback(error);
-  }
+  const database = requireFirestore("그룹방 번호 중복 확인");
 
-  return !getLocalRooms().some((room) => room.roomNumber === normalized);
+  try {
+    const room = await getFirestoreRoom(database, normalized);
+    return !room;
+  } catch (error) {
+    throwFirestoreError("그룹방 번호 중복 확인", error);
+  }
 }
 
 export async function createGroupRoom(roomNumber: string, password: string) {
   const normalized = normalizeRoomNumber(roomNumber);
+  const cleanPassword = normalizePassword(password);
+
   if (!normalized) {
     throw new Error("그룹방 번호를 숫자로 입력해 주세요.");
   }
-  if (!password) {
+  if (!cleanPassword) {
     throw new Error("비밀번호를 입력해 주세요.");
   }
 
-  const timestamp = nowIso();
-  const room: GroupRoom = {
-    roomNumber: normalized,
-    passwordHash: await hashRoomPassword(normalized, password),
-    createdAt: timestamp,
-    updatedAt: timestamp
-  };
+  const database = requireFirestore("그룹방 생성");
 
   try {
-    const ref = roomDocRef(normalized);
-    if (ref) {
-      const existingRoom = await getFirestoreRoom(normalized);
-      if (existingRoom) {
-        throw new Error("이미 사용 중인 그룹방 번호입니다.");
-      }
-
-      await setDoc(ref, room);
-      rememberLocalRoom(room);
-
-      const legacyMembers = readLegacyMembers(normalized);
-      if (legacyMembers.length) {
-        await saveMembers(normalized, legacyMembers);
-      }
-
-      return room;
+    const existingRoom = await getFirestoreRoom(database, normalized);
+    if (existingRoom) {
+      throw new Error("이미 사용 중인 그룹방 번호입니다.");
     }
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("이미 사용 중")) {
-      throw error;
-    }
-    warnFirestoreFallback(error);
-  }
 
-  const rooms = getLocalRooms();
-  if (rooms.some((item) => item.roomNumber === normalized)) {
-    throw new Error("이미 사용 중인 그룹방 번호입니다.");
-  }
-  if (!saveLocalRooms([...rooms, room])) {
-    throw new Error("브라우저 저장소를 사용할 수 없어 그룹방을 만들 수 없습니다.");
-  }
+    const timestamp = nowIso();
+    const room: GroupRoom = {
+      roomNumber: normalized,
+      passwordHash: await hashRoomPassword(normalized, cleanPassword),
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
 
-  const existingMembers = getLocalMembers(normalized);
-  if (!existingMembers.length) {
+    await setDoc(roomDocRef(database, normalized), room);
+    rememberLocalRoom(room);
+
     const legacyMembers = readLegacyMembers(normalized);
     if (legacyMembers.length) {
-      saveLocalMembers(normalized, legacyMembers);
+      await saveMembers(normalized, legacyMembers);
     }
-  }
 
-  return room;
+    return room;
+  } catch (error) {
+    if (error instanceof Error && error.message === "이미 사용 중인 그룹방 번호입니다.") {
+      throw error;
+    }
+    throwFirestoreError("그룹방 생성", error);
+  }
 }
 
 export async function loginGroupRoom(roomNumber: string, password: string) {
   const normalized = normalizeRoomNumber(roomNumber);
-  if (!normalized || !password) return null;
+  const cleanPassword = normalizePassword(password);
+
+  if (!normalized || !cleanPassword) return null;
+
+  const database = requireFirestore("그룹방 로그인");
 
   try {
-    const firestoreRoom = db ? await getFirestoreRoom(normalized) : null;
-    if (firestoreRoom) {
-      const matched = await passwordMatches(firestoreRoom, normalized, password);
-      if (!matched) return null;
+    const room = await getFirestoreRoom(database, normalized);
+    if (!room) return null;
 
-      rememberLocalRoom(firestoreRoom);
-      const firestoreMembers = await getFirestoreMembers(normalized);
-      if (firestoreMembers) {
-        saveLocalMembers(normalized, firestoreMembers);
-      }
-      return firestoreRoom;
-    }
+    const matched = await passwordMatches(room, normalized, cleanPassword);
+    if (!matched) return null;
+
+    rememberLocalRoom(room);
+    return room;
   } catch (error) {
-    warnFirestoreFallback(error);
+    throwFirestoreError("그룹방 로그인", error);
   }
-
-  const localRoom =
-    getLocalRooms().find((item) => item.roomNumber === normalized) ?? null;
-  if (!localRoom || !(await passwordMatches(localRoom, normalized, password))) {
-    return null;
-  }
-  return localRoom;
 }
 
 export async function getMembers(roomNumber: string) {
   const normalized = normalizeRoomNumber(roomNumber);
   if (!normalized) return [];
 
-  try {
-    const firestoreMembers = db ? await getFirestoreMembers(normalized) : null;
-    if (firestoreMembers) {
-      saveLocalMembers(normalized, firestoreMembers);
-      return firestoreMembers;
-    }
-  } catch (error) {
-    warnFirestoreFallback(error);
-  }
+  const database = requireFirestore("후보 목록 불러오기");
 
-  return getLocalMembers(normalized);
+  try {
+    const members = await getFirestoreMembers(database, normalized);
+    saveLocalMembers(normalized, members);
+    return members;
+  } catch (error) {
+    throwFirestoreError("후보 목록 불러오기", error);
+  }
 }
 
 export async function saveMembers(roomNumber: string, members: Member[]) {
   const normalized = normalizeRoomNumber(roomNumber);
   if (!normalized) return false;
 
+  const database = requireFirestore("후보 목록 저장");
   const timestamp = nowIso();
   const normalizedMembers = members
     .map((member, index) => normalizeMember(member, normalized, index, timestamp))
@@ -452,35 +445,36 @@ export async function saveMembers(roomNumber: string, members: Member[]) {
     }));
 
   try {
-    const ref = membersCollectionRef(normalized);
-    if (db && ref) {
-      const snapshot = await getDocs(ref);
-      const nextIds = new Set(normalizedMembers.map((member) => member.id));
-      const batch = writeBatch(db);
+    const membersRef = membersCollectionRef(database, normalized);
+    const snapshot = await getDocs(membersRef);
+    const nextIds = new Set(normalizedMembers.map((member) => member.id));
+    const batch = writeBatch(database);
 
-      snapshot.docs.forEach((memberDoc) => {
-        if (!nextIds.has(memberDoc.id)) {
-          batch.delete(memberDoc.ref);
-        }
-      });
+    snapshot.docs.forEach((memberDoc) => {
+      if (!nextIds.has(memberDoc.id)) {
+        batch.delete(memberDoc.ref);
+      }
+    });
 
-      normalizedMembers.forEach((member) => {
-        batch.set(doc(ref, member.id), member, { merge: true });
-      });
+    normalizedMembers.forEach((member) => {
+      batch.set(doc(membersRef, member.id), member, { merge: true });
+    });
 
-      await batch.commit();
-      saveLocalMembers(normalized, normalizedMembers);
-      return true;
-    }
+    await batch.commit();
+    saveLocalMembers(normalized, normalizedMembers);
+    return true;
   } catch (error) {
-    warnFirestoreFallback(error);
+    throwFirestoreError("후보 목록 저장", error);
   }
-
-  return saveLocalMembers(normalized, normalizedMembers);
 }
 
 export async function addMember(roomNumber: string, member: MemberInput) {
   const normalized = normalizeRoomNumber(roomNumber);
+  if (!normalized) {
+    throw new Error("그룹방 번호가 올바르지 않습니다.");
+  }
+
+  const database = requireFirestore("후보 추가");
   const timestamp = nowIso();
   const id =
     typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -502,20 +496,12 @@ export async function addMember(roomNumber: string, member: MemberInput) {
   };
 
   try {
-    const ref = memberDocRef(normalized, id);
-    if (ref) {
-      await setDoc(ref, nextMember);
-      const current = getLocalMembers(normalized);
-      saveLocalMembers(normalized, [...current, nextMember]);
-      return nextMember;
-    }
+    await setDoc(memberDocRef(database, normalized, id), nextMember);
+    saveLocalMembers(normalized, [...getLocalMembers(normalized), nextMember]);
+    return nextMember;
   } catch (error) {
-    warnFirestoreFallback(error);
+    throwFirestoreError("후보 추가", error);
   }
-
-  const members = getLocalMembers(normalized);
-  saveLocalMembers(normalized, [...members, nextMember]);
-  return nextMember;
 }
 
 export async function updateMember(
@@ -524,62 +510,69 @@ export async function updateMember(
   updatedMember: Partial<MemberInput>
 ) {
   const normalized = normalizeRoomNumber(roomNumber);
-  const members = await getMembers(normalized);
-  const timestamp = nowIso();
-  const nextMembers = members.map((member) =>
-    member.id === memberId
-      ? {
-          ...member,
-          ...updatedMember,
-          name: updatedMember.name?.trim() ?? member.name,
-          avatarId: isAvatarIdForGender(
-            updatedMember.avatarId ?? member.avatarId,
-            updatedMember.gender ?? member.gender
-          )
-            ? updatedMember.avatarId ?? member.avatarId
-            : getDefaultAvatarId(
-                updatedMember.gender ?? member.gender,
-                `${member.id}-${updatedMember.name ?? member.name}`
-              ),
-          updatedAt: timestamp
-        }
-      : member
-  );
-  const nextMember = nextMembers.find((member) => member.id === memberId) ?? null;
-
-  if (nextMember) {
-    try {
-      const ref = memberDocRef(normalized, memberId);
-      if (ref) {
-        await setDoc(ref, nextMember, { merge: true });
-        saveLocalMembers(normalized, nextMembers);
-        return nextMember;
-      }
-    } catch (error) {
-      warnFirestoreFallback(error);
-    }
+  if (!normalized) {
+    throw new Error("그룹방 번호가 올바르지 않습니다.");
   }
 
-  saveLocalMembers(normalized, nextMembers);
-  return nextMember;
+  const database = requireFirestore("후보 수정");
+  const timestamp = nowIso();
+
+  try {
+    const ref = memberDocRef(database, normalized, memberId);
+    const snapshot = await getDoc(ref);
+    if (!snapshot.exists()) return null;
+
+    const current = normalizeMember(
+      { id: snapshot.id, ...snapshot.data() },
+      normalized,
+      0,
+      timestamp
+    );
+    if (!current) return null;
+
+    const nextMember: Member = {
+      ...current,
+      ...updatedMember,
+      name: updatedMember.name?.trim() ?? current.name,
+      avatarId: isAvatarIdForGender(
+        updatedMember.avatarId ?? current.avatarId,
+        updatedMember.gender ?? current.gender
+      )
+        ? updatedMember.avatarId ?? current.avatarId
+        : getDefaultAvatarId(
+            updatedMember.gender ?? current.gender,
+            `${current.id}-${updatedMember.name ?? current.name}`
+          ),
+      updatedAt: timestamp
+    };
+
+    await setDoc(ref, nextMember, { merge: true });
+    saveLocalMembers(
+      normalized,
+      getLocalMembers(normalized).map((member) =>
+        member.id === memberId ? nextMember : member
+      )
+    );
+    return nextMember;
+  } catch (error) {
+    throwFirestoreError("후보 수정", error);
+  }
 }
 
 export async function deleteMember(roomNumber: string, memberId: string) {
   const normalized = normalizeRoomNumber(roomNumber);
-  const members = await getMembers(normalized);
-  const nextMembers = members.filter((member) => member.id !== memberId);
+  if (!normalized) return [];
+
+  const database = requireFirestore("후보 삭제");
 
   try {
-    const ref = memberDocRef(normalized, memberId);
-    if (ref) {
-      await deleteDoc(ref);
-      saveLocalMembers(normalized, nextMembers);
-      return nextMembers;
-    }
+    await deleteDoc(memberDocRef(database, normalized, memberId));
+    const nextMembers = getLocalMembers(normalized).filter(
+      (member) => member.id !== memberId
+    );
+    saveLocalMembers(normalized, nextMembers);
+    return nextMembers;
   } catch (error) {
-    warnFirestoreFallback(error);
+    throwFirestoreError("후보 삭제", error);
   }
-
-  saveLocalMembers(normalized, nextMembers);
-  return nextMembers;
 }

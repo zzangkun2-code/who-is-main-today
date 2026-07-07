@@ -1255,7 +1255,16 @@ export function FortuneApp() {
     setPeople((current) => {
       const next = updater(current);
       if (activeRoom) {
-        void saveMembers(activeRoom.roomNumber, next);
+        const roomNumber = activeRoom.roomNumber;
+        void saveMembers(roomNumber, next).catch((storageError) => {
+          console.error("[Firestore] 후보 목록 저장 실패", storageError);
+          setError(
+            storageError instanceof Error
+              ? storageError.message
+              : "후보 정보를 Firebase에 저장하지 못했습니다."
+          );
+          setPeople(current);
+        });
       }
       return next;
     });
@@ -1269,27 +1278,39 @@ export function FortuneApp() {
       return;
     }
 
-    const available = await checkRoomNumberAvailable(roomNumber);
-    setRoomCheck({
-      roomNumber,
-      status: available ? "available" : "taken"
-    });
-    setAuthMessage(
-      available
-        ? "사용 가능한 그룹방 번호입니다."
-        : "이미 사용 중인 그룹방 번호입니다."
-    );
+    try {
+      const available = await checkRoomNumberAvailable(roomNumber);
+      setRoomCheck({
+        roomNumber,
+        status: available ? "available" : "taken"
+      });
+      setAuthMessage(
+        available
+          ? "사용 가능한 그룹방 번호입니다."
+          : "이미 사용 중인 그룹방 번호입니다."
+      );
+    } catch (roomError) {
+      console.error("[Firestore] 그룹방 번호 중복 확인 실패", roomError);
+      setRoomCheck({ roomNumber: "", status: "idle" });
+      setAuthMessage(
+        roomError instanceof Error
+          ? roomError.message
+          : "Firebase에서 그룹방 번호를 확인하지 못했습니다."
+      );
+    }
   }
 
   async function submitCreateRoom(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const roomNumber = normalizeRoomNumber(createForm.roomNumber);
+    const password = createForm.password.trim();
+    const passwordConfirm = createForm.passwordConfirm.trim();
 
-    if (!roomNumber || !createForm.password || !createForm.passwordConfirm) {
+    if (!roomNumber || !password || !passwordConfirm) {
       setAuthMessage("그룹방 번호와 비밀번호를 모두 입력해 주세요.");
       return;
     }
-    if (createForm.password !== createForm.passwordConfirm) {
+    if (password !== passwordConfirm) {
       setAuthMessage("비밀번호와 비밀번호 재입력이 서로 다릅니다.");
       return;
     }
@@ -1302,11 +1323,12 @@ export function FortuneApp() {
     }
 
     try {
-      const room = await createGroupRoom(roomNumber, createForm.password);
+      const room = await createGroupRoom(roomNumber, password);
       setCreateForm(emptyRoomForm);
       setRoomCheck({ roomNumber: "", status: "idle" });
       await enterRoom(room);
     } catch (roomError) {
+      console.error("[Firestore] 그룹방 생성 실패", roomError);
       setAuthMessage(
         roomError instanceof Error
           ? roomError.message
@@ -1318,19 +1340,29 @@ export function FortuneApp() {
   async function submitLoginRoom(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const roomNumber = normalizeRoomNumber(loginForm.roomNumber);
-    if (!roomNumber || !loginForm.password) {
+    const password = loginForm.password.trim();
+    if (!roomNumber || !password) {
       setAuthMessage("그룹방 번호와 비밀번호를 입력해 주세요.");
       return;
     }
 
-    const room = await loginGroupRoom(roomNumber, loginForm.password);
-    if (!room) {
-      setAuthMessage("그룹방 번호 또는 비밀번호가 올바르지 않습니다.");
-      return;
-    }
+    try {
+      const room = await loginGroupRoom(roomNumber, password);
+      if (!room) {
+        setAuthMessage("그룹방 번호 또는 비밀번호가 올바르지 않습니다.");
+        return;
+      }
 
-    setLoginForm({ roomNumber: "", password: "" });
-    await enterRoom(room);
+      setLoginForm({ roomNumber: "", password: "" });
+      await enterRoom(room);
+    } catch (roomError) {
+      console.error("[Firestore] 그룹방 로그인 실패", roomError);
+      setAuthMessage(
+        roomError instanceof Error
+          ? roomError.message
+          : "Firebase에서 그룹방 정보를 불러오지 못했습니다."
+      );
+    }
   }
 
   function leaveRoom() {
@@ -1421,7 +1453,14 @@ export function FortuneApp() {
   function deletePerson(id: string) {
     updatePeople((current) => current.filter((person) => person.id !== id));
     if (activeRoom) {
-      void deleteMember(activeRoom.roomNumber, id);
+      void deleteMember(activeRoom.roomNumber, id).catch((storageError) => {
+        console.error("[Firestore] 후보 삭제 실패", storageError);
+        setError(
+          storageError instanceof Error
+            ? storageError.message
+            : "후보 정보를 Firebase에서 삭제하지 못했습니다."
+        );
+      });
     }
     if (editingId === id) {
       setForm(emptyForm);
