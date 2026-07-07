@@ -26,6 +26,767 @@ body {
   font-family: Pretendard, ui-sans-serif, system-ui, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;
 }
 
+.fortune-app {
+  position: relative;
+  background:
+    radial-gradient(circle at 15% 8%, rgba(233, 218, 255, 0.9), transparent 28rem),
+    radial-gradient(circle at 90% 25%, rgba(255, 225, 236, 0.82), transparent 30rem),
+    linear-gradient(150deg, #fbf9ff 0%, #fffaf5 48%, #f7f2ff 100%);
+  isolation: isolate;
+}
+
+.fortune-app::before {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  background-image:
+    radial-gradient(circle, rgba(132, 91, 180, 0.16) 1px, transparent 1.5px),
+    radial-gradient(circle, rgba(244, 172, 86, 0.16) 1px, transparent 1.5px);
+  background-position: 0 0, 22px 24px;
+  background-size: 48px 48px;
+  content: "";
+  mask-image: linear-gradient(to bottom, black, transparent 78%);
+  pointer-events: none;
+}
+
+.magic-orb {
+  position: absolute;
+  z-index: -1;
+  border-radius: 999px;
+  filter: blur(2px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.magic-orb-one {
+  top: 8rem;
+  left: -7rem;
+  width: 18rem;
+  height: 18rem;
+  background: rgba(201, 174, 240, 0.42);
+}
+
+.magic-orb-two {
+  top: 32rem;
+  right: -8rem;
+  width: 22rem;
+  height: 22rem;
+  background: rgba(255, 211, 161, 0.34);
+}
+
+.hero-gradient {
+  background: linear-gradient(100deg, #7650b5 8%, #d56d9b 52%, #e8a13f 95%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.fortune-app button,
+.fortune-app input,
+.fortune-app select {
+  touch-action: manipulation;
+}
+
+.auth-action-button {
+  word-break: keep-all;
+  overflow-wrap: normal;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.auth-button-text {
+  display: inline-flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0 0.35rem;
+  text-align: center;
+}
+
+.auth-button-text span {
+  white-space: nowrap;
+}
+
+.fortune-app .text-xs {
+  font-size: clamp(0.86rem, 0.82rem + 0.18vw, 0.96rem);
+  line-height: 1.45;
+}
+
+.fortune-app .text-sm {
+  font-size: clamp(1rem, 0.95rem + 0.2vw, 1.1rem);
+  line-height: 1.55;
+}
+
+.fortune-app .text-base {
+  font-size: clamp(1.08rem, 1rem + 0.28vw, 1.2rem);
+  line-height: 1.65;
+}
+
+.fortune-app .text-lg {
+  font-size: clamp(1.2rem, 1.08rem + 0.36vw, 1.35rem);
+  line-height: 1.45;
+}
+
+.fortune-app .text-xl {
+  font-size: clamp(1.34rem, 1.16rem + 0.5vw, 1.55rem);
+  line-height: 1.35;
+}
+
+.fortune-app .text-2xl {
+  font-size: clamp(1.58rem, 1.32rem + 0.7vw, 1.85rem);
+  line-height: 1.28;
+}
+
+.fortune-input {
+  width: 100%;
+  min-height: 3.6rem;
+  border: 1px solid #e8e1ed;
+  border-radius: 1.1rem;
+  background: rgba(255, 255, 255, 0.94);
+  padding: 0.8rem 1rem;
+  color: #4b3e5d;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.35;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.fortune-input.pl-11 {
+  padding-left: 3rem;
+}
+
+.fortune-input::placeholder {
+  color: #b1a7b9;
+  font-weight: 600;
+}
+
+.fortune-input:disabled {
+  background: rgba(248, 245, 251, 0.78);
+  color: #a69aac;
+}
+
+.fortune-input:focus {
+  border-color: #aa82da;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(170, 130, 218, 0.16);
+}
+
+.birth-date-picker {
+  position: relative;
+}
+
+.year-picker-trigger {
+  display: flex;
+  width: 100%;
+  min-height: 3.8rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  border: 1px solid #e8e1ed;
+  border-radius: 1.1rem;
+  background: rgba(255, 255, 255, 0.94);
+  padding: 0.85rem 1rem;
+  color: #4b3e5d;
+  font-size: 1.05rem;
+  font-weight: 800;
+  text-align: left;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.year-picker-trigger:hover,
+.year-picker-trigger[aria-expanded="true"] {
+  border-color: #c7a7e7;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(170, 130, 218, 0.12);
+}
+
+.year-picker-trigger small {
+  color: #9a8fa5;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.year-picker-panel {
+  margin-top: 0.85rem;
+  border: 1px solid rgba(222, 210, 234, 0.95);
+  border-radius: 1.35rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(252, 249, 255, 0.96)),
+    #fff;
+  padding: 1rem;
+  box-shadow: 0 16px 38px rgba(91, 65, 120, 0.12);
+}
+
+.year-picker-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.8rem;
+  color: #4b3b63;
+}
+
+.year-picker-heading strong {
+  font-size: 1.1rem;
+  font-weight: 900;
+}
+
+.year-picker-heading span {
+  color: #998ba8;
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.year-grid-scroll {
+  max-height: calc(4 * 3.2rem + 3 * 0.55rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.15rem;
+  scroll-behavior: smooth;
+  scrollbar-color: #c7a7e7 #f4eefb;
+  scrollbar-width: thin;
+}
+
+.year-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.year-option {
+  min-height: 3.2rem;
+  border: 1px solid #eadff1;
+  border-radius: 0.95rem;
+  background: #fff;
+  color: #685977;
+  font-size: 1rem;
+  font-weight: 900;
+  box-shadow: 0 6px 14px rgba(91, 65, 120, 0.05);
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.year-option:hover {
+  border-color: #cba9eb;
+  background: #faf6ff;
+  box-shadow: 0 10px 20px rgba(91, 65, 120, 0.09);
+  transform: translateY(-1px);
+}
+
+.year-option-selected,
+.year-option-selected:hover {
+  border-color: transparent;
+  background: linear-gradient(135deg, #7f5bc3, #ef83aa);
+  color: white;
+  box-shadow: 0 12px 24px rgba(133, 84, 184, 0.28);
+}
+
+.birth-month-day-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  margin-top: 0.9rem;
+}
+
+.birth-choice-group,
+.birth-time-picker {
+  min-width: 0;
+  border: 1px solid rgba(232, 225, 237, 0.92);
+  border-radius: 1.25rem;
+  background: rgba(255, 255, 255, 0.62);
+  padding: 0.85rem;
+}
+
+.birth-choice-group > legend,
+.birth-time-picker > legend {
+  padding: 0 0.35rem;
+  color: #5a4c6c;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.month-grid,
+.day-grid,
+.hour-grid,
+.minute-grid {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.month-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.day-grid {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.hour-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.minute-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 18rem;
+}
+
+.date-option,
+.time-option {
+  min-width: 0;
+  min-height: 3.05rem;
+  border: 1px solid #eadff1;
+  border-radius: 0.95rem;
+  background: #fff;
+  color: #655775;
+  font-size: 0.98rem;
+  font-weight: 900;
+  line-height: 1.15;
+  box-shadow: 0 6px 14px rgba(91, 65, 120, 0.05);
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+  white-space: nowrap;
+}
+
+.date-option:hover,
+.time-option:hover {
+  border-color: #cba9eb;
+  background: #faf6ff;
+  box-shadow: 0 10px 20px rgba(91, 65, 120, 0.09);
+  transform: translateY(-1px);
+}
+
+.date-option-selected,
+.date-option-selected:hover,
+.time-option-selected,
+.time-option-selected:hover {
+  border-color: transparent;
+  background: linear-gradient(135deg, #7f5bc3, #ef83aa);
+  color: white;
+  box-shadow: 0 12px 24px rgba(133, 84, 184, 0.28);
+}
+
+.date-option:disabled {
+  background: #f7f3fa;
+  color: #b6abbf;
+  transform: none;
+  box-shadow: none;
+}
+
+.date-picker-hint {
+  margin: 0;
+  border: 1px dashed #dfd2e8;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.58);
+  padding: 1rem;
+  color: #92869f;
+  font-size: 0.98rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.time-picker-summary {
+  display: flex;
+  min-height: 3.2rem;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid #eadff1;
+  border-radius: 1rem;
+  background: white;
+  padding: 0.65rem 0.85rem;
+  color: #5b4c6f;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.time-picker-section {
+  margin-top: 0.9rem;
+}
+
+.time-picker-section > p {
+  margin: 0 0 0.45rem;
+  color: #5a4c6c;
+  font-size: 0.98rem;
+  font-weight: 900;
+}
+
+.candidate-card {
+  word-break: keep-all;
+  overflow-wrap: normal;
+}
+
+.candidate-card-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+.candidate-avatar-button {
+  display: grid;
+  justify-items: center;
+  gap: 0.2rem;
+  align-self: center;
+  padding: 0.25rem;
+}
+
+.candidate-avatar-hint {
+  border-radius: 999px;
+  background: #f6f0ff;
+  padding: 0.1rem 0.45rem;
+  color: #8769b4;
+  font-size: 0.68rem;
+  font-weight: 900;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.avatar-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+  gap: 0.75rem;
+}
+
+.avatar-choice-card {
+  position: relative;
+  display: grid;
+  min-height: 10rem;
+  place-items: center;
+  gap: 0.45rem;
+  border: 1px solid #eadff1;
+  border-radius: 1.25rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(251, 247, 255, 0.95)),
+    #fff;
+  padding: 0.8rem 0.55rem;
+  color: #5b4a70;
+  font-size: 0.92rem;
+  font-weight: 900;
+  line-height: 1.25;
+  text-align: center;
+  word-break: keep-all;
+  box-shadow: 0 10px 24px rgba(91, 65, 120, 0.07);
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.avatar-choice-card:hover {
+  border-color: #cba9eb;
+  background: #fbf8ff;
+  box-shadow: 0 14px 30px rgba(91, 65, 120, 0.12);
+  transform: translateY(-2px);
+}
+
+.avatar-choice-selected,
+.avatar-choice-selected:hover {
+  border-color: #9d75d3;
+  background:
+    linear-gradient(180deg, rgba(246, 239, 255, 0.98), rgba(255, 242, 247, 0.98)),
+    #fff;
+  box-shadow: 0 16px 34px rgba(133, 84, 184, 0.22);
+}
+
+.avatar-choice-check {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  display: grid;
+  width: 1.65rem;
+  height: 1.65rem;
+  place-items: center;
+  border-radius: 999px;
+  background: #8a62ca;
+  color: white;
+  box-shadow: 0 8px 18px rgba(138, 98, 202, 0.28);
+}
+
+.candidate-info {
+  min-width: 0;
+}
+
+.candidate-title-row {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.5rem;
+}
+
+.candidate-name {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidate-age,
+.candidate-meta-row span {
+  white-space: nowrap;
+}
+
+.candidate-meta-row {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+  color: #8f83a0;
+  font-size: clamp(0.92rem, 0.86rem + 0.16vw, 1rem);
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.candidate-meta-row span {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: #f8f4fb;
+  padding: 0.25rem 0.55rem;
+}
+
+.candidate-zodiac {
+  background: #fff6df !important;
+  color: #795e22;
+}
+
+.candidate-actions {
+  display: flex;
+  align-self: start;
+}
+
+.fortune-ranking-summary {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.fortune-character {
+  filter: drop-shadow(0 8px 12px rgba(89, 58, 111, 0.12));
+  transition: transform 220ms ease;
+}
+
+button:hover > .fortune-character,
+.fortune-character:hover {
+  transform: translateY(-2px) rotate(-1deg);
+}
+
+.crown-bounce {
+  animation: crown-bounce 2.2s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+
+.modal-fade {
+  animation: modal-fade 180ms ease-out both;
+}
+
+.modal-pop {
+  animation: modal-pop 260ms cubic-bezier(0.18, 0.89, 0.32, 1.2) both;
+  -webkit-overflow-scrolling: touch;
+}
+
+.podium-person {
+  animation: podium-rise 620ms cubic-bezier(0.18, 0.89, 0.32, 1.15) both;
+}
+
+.confetti {
+  position: absolute;
+  z-index: 0;
+  inset: 0 0 auto;
+  height: 20rem;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.confetti i {
+  position: absolute;
+  top: -1rem;
+  left: calc(2% + var(--i) * 5.35%);
+  width: 0.55rem;
+  height: 0.9rem;
+  border-radius: 0.2rem;
+  background: hsl(calc(36deg + var(--i) * 23deg) 76% 68%);
+  animation: confetti-fall 3s ease-in infinite;
+  animation-delay: calc(var(--i) * -0.17s);
+  transform: rotate(calc(var(--i) * 21deg));
+}
+
+@keyframes crown-bounce {
+  0%,
+  100% {
+    transform: translateX(-50%) translateY(0) rotate(-4deg);
+  }
+  50% {
+    transform: translateX(-50%) translateY(-5px) rotate(4deg);
+  }
+}
+
+@keyframes modal-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-pop {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes podium-rise {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes confetti-fall {
+  0% {
+    opacity: 0;
+    transform: translateY(-1rem) rotate(0);
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(19rem) rotate(540deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crown-bounce,
+  .modal-fade,
+  .modal-pop,
+  .podium-person,
+  .confetti i {
+    animation: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .year-picker-panel {
+    border-radius: 1.15rem;
+    padding: 0.85rem;
+  }
+
+  .year-picker-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .year-grid-scroll {
+    max-height: calc(4 * 3.05rem + 3 * 0.45rem);
+  }
+
+  .year-grid {
+    gap: 0.45rem;
+  }
+
+  .year-option {
+    min-height: 3.05rem;
+    border-radius: 0.85rem;
+    font-size: 0.96rem;
+  }
+
+  .year-picker-trigger,
+  .fortune-input {
+    min-height: 3.5rem;
+    font-size: 1rem;
+  }
+
+  .month-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .hour-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .day-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .minute-grid {
+    max-width: none;
+  }
+
+  .date-option,
+  .time-option {
+    min-height: 3rem;
+    border-radius: 0.85rem;
+    font-size: 0.94rem;
+  }
+
+  .candidate-card-body {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .candidate-actions {
+    grid-column: 2;
+    margin-top: -0.2rem;
+  }
+
+  .candidate-card .fortune-character {
+    transform: scale(0.94);
+    transform-origin: left center;
+  }
+
+  .fortune-ranking-summary {
+    -webkit-line-clamp: 4;
+  }
+}
+
+@media (max-width: 380px) {
+  .year-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .year-grid-scroll {
+    max-height: calc(5 * 3.05rem + 4 * 0.45rem);
+  }
+
+  .month-grid,
+  .hour-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .day-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .candidate-card-body {
+    grid-template-columns: 1fr;
+  }
+
+  .candidate-avatar-button,
+  .candidate-actions {
+    justify-self: start;
+  }
+
+  .avatar-choice-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .candidate-actions {
+    grid-column: auto;
+  }
+}
+
 button,
 input,
 select,

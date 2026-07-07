@@ -1,5 +1,5 @@
-import { AppRouter } from "@/components/AppRouter";
+import { FortuneApp } from "@/components/fortune/FortuneApp";
 
 export default function Home() {
-  return <AppRouter />;
+  return <FortuneApp />;
 }
