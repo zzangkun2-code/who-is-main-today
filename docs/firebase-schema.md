@@ -1,103 +1,38 @@
-# Firestore DB Structure
+# who-is-main-today Firestore schema
 
-## `admins/{uid}`
+## `groupRooms/{roomNumber}`
 
-Firebase Authentication에서 만든 교육청 관리자 계정의 권한 문서입니다.
-
-```ts
-{
-  email: string;
-  name?: string;
-  role: "admin";
-  createdAt?: Timestamp;
-}
-```
-
-## `schools/{uid}`
-
-관리자가 발급한 학교 계정입니다. 관리자는 `schoolId`, 초기 비밀번호, 학교명, 사업유형을 세팅하고, 학교는 `partnerInfo`, `theme`만 입력합니다.
+그룹방 기본 정보입니다.
 
 ```ts
 {
-  uid: string;
-  email: string; // 예: 26e01@exchange.jbe.kr
-  schoolId: string; // 예: 26e01
-  schoolName: string;
-  businessType: "A" | "B" | "C" | "D";
-  year: number; // 예: 2026
-  schoolLevel: "초등학교" | "중학교" | "고등학교";
-  partnerInfo: string;
-  theme: string;
-  videoLinks: {
-    online?: string[];
-    fieldTrip?: string[];
-    invitation?: string[];
-  };
-  isFirstLogin: boolean;
-  mustChangePassword: boolean;
-  createdBy: string;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  roomNumber: string;
+  password: string;
+  createdAt: string;
+  updatedAt: string;
 }
 ```
 
-학교 ID 규칙:
+현재 localStorage fallback 및 클라이언트 호환을 위해 `password` 필드를 사용합니다.
+실제 운영 보안을 강화할 때는 서버 API route, Firebase Functions, Firebase Auth 등을 통해 `passwordHash` 방식으로 교체하세요.
 
-```txt
-26e01 = 2026년 초등학교 01번
-26m01 = 2026년 중학교 01번
-26h01 = 2026년 고등학교 01번
-```
+## `groupRooms/{roomNumber}/members/{memberId}`
 
-## `schools/{uid}/schedules/{scheduleId}`
-
-일정 데이터입니다. 국가는 직접 문자열이 아니라 배열로 저장합니다.
+그룹방 안의 후보자 정보입니다.
 
 ```ts
 {
-  ownerUid: string;
-  schoolName: string;
-  type: "online" | "fieldTrip" | "invitation";
-  title: string;
-  start: string;
-  end: string;
-  payload: {
-    countries: Array<{
-      country: string;
-      continent: string;
-      isOther?: boolean;
-    }>;
-    // type별 추가 필드
-  };
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  id: string;
+  roomNumber: string;
+  name: string;
+  gender: "female" | "male";
+  birthDate: string; // YYYY-MM-DD
+  birthTime: string; // HH:mm
+  avatarId: string;
+  createdAt: string;
+  updatedAt: string;
 }
 ```
 
-## `schools/{uid}.videoLinks`
-
-학교가 제출하는 영상 링크입니다. 사업 탭별로 최대 5개의 URL을 배열로 저장합니다.
-
-```ts
-{
-  videoLinks: {
-    online?: string[];
-    fieldTrip?: string[];
-    invitation?: string[];
-  };
-}
-```
-
-## `faqs/{faqId}`
-
-관리자가 작성하고 학교가 읽는 FAQ입니다.
-
-```ts
-{
-  category: "online" | "fieldTrip" | "invitation";
-  question: string;
-  answer: string;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-}
-```
+후보자는 반드시 해당 그룹방의 하위 컬렉션에 저장됩니다.
+예를 들어 `1001`번 방의 후보자는 `groupRooms/1001/members/{memberId}`에만 저장됩니다.

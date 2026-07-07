@@ -3,8 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "오늘의 주인공은?",
-  description:
-    "오늘의 운세로 우리 중 가장 반짝이는 주인공을 뽑아 보세요."
+  description: "오늘 가장 빛나는 사람을 뽑아보세요."
 };
 
 export const viewport: Viewport = {

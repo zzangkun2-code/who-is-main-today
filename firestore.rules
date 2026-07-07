@@ -1,60 +1,68 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() {
-      return request.auth != null;
+    function isValidRoomNumber(roomNumber) {
+      return roomNumber is string && roomNumber.matches('^[0-9]{1,12}$');
     }
-    function isOwner(uid) {
-      return signedIn() && request.auth.uid == uid;
+
+    function isRoomPayload(roomNumber) {
+      return request.resource.data.keys().hasOnly([
+          'roomNumber',
+          'password',
+          'passwordHash',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.roomNumber == roomNumber
+        && isValidRoomNumber(request.resource.data.roomNumber)
+        && request.resource.data.updatedAt is string;
     }
-    function isAdmin() {
-      return signedIn()
-        && (
-          request.auth.token.email == "admin_exchange@jbe.go.kr"
-          || exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-        );
+
+    function isMemberPayload(roomNumber, memberId) {
+      return request.resource.data.keys().hasOnly([
+          'id',
+          'roomNumber',
+          'name',
+          'gender',
+          'birthDate',
+          'birthTime',
+          'avatarId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.id == memberId
+        && request.resource.data.roomNumber == roomNumber
+        && request.resource.data.name is string
+        && request.resource.data.gender in ['female', 'male']
+        && request.resource.data.birthDate is string
+        && request.resource.data.birthTime is string
+        && request.resource.data.avatarId is string
+        && request.resource.data.updatedAt is string;
     }
-    function validProgramType(value) {
-      return value in ["online", "fieldTrip", "invitation"];
-    }
-    function schoolEditableFieldsOnly() {
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-        "partnerInfo",
-        "theme",
-        "videoLinks",
-        "isFirstLogin",
-        "mustChangePassword",
-        "updatedAt"
-      ]);
-    }
-    match /admins/{adminId} {
-      allow read: if isOwner(adminId) || isAdmin();
-      allow write: if isAdmin();
-    }
-    match /faqs/{faqId} {
-      allow read: if signedIn();
-      allow write: if isAdmin();
-    }
-    match /schools/{schoolId} {
-      allow read: if isOwner(schoolId) || isAdmin();
-      allow create, delete: if isAdmin();
-      allow update: if isAdmin() || (isOwner(schoolId) && schoolEditableFieldsOnly());
-      match /schedules/{scheduleId} {
-        allow read: if isOwner(schoolId) || isAdmin();
-        allow create: if validProgramType(request.resource.data.type)
-          && (
-            isAdmin()
-            || (isOwner(schoolId) && request.resource.data.ownerUid == request.auth.uid)
-          );
-        allow update, delete: if isAdmin()
-          || (isOwner(schoolId) && resource.data.ownerUid == request.auth.uid);
+
+    match /groupRooms/{roomNumber} {
+      allow read: if isValidRoomNumber(roomNumber);
+      allow create: if isRoomPayload(roomNumber);
+      allow update: if isRoomPayload(roomNumber);
+
+      // Prototype admin mode can delete rooms from the client.
+      // For production, move admin deletion behind Firebase Auth or a server API.
+      allow delete: if isValidRoomNumber(roomNumber);
+
+      match /members/{memberId} {
+        allow read: if isValidRoomNumber(roomNumber);
+        allow create: if isMemberPayload(roomNumber, memberId);
+        allow update: if isMemberPayload(roomNumber, memberId);
+
+        // Prototype admin/member deletion is client-side.
+        // For production, protect this with Firebase Auth or a server API.
+        allow delete: if isValidRoomNumber(roomNumber);
       }
     }
-    match /{path=**}/schedules/{scheduleId} {
-      allow read: if isAdmin();
-    }
+
     match /{document=**} {
-      allow read, write: if isAdmin();
+      allow read, write: if false;
     }
   }
 }

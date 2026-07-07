@@ -43,10 +43,14 @@ import {
   isAvatarIdForGender
 } from "@/lib/avatar";
 import {
+  type AdminGroupRoomSummary,
   checkRoomNumberAvailable,
   createGroupRoom,
+  deleteGroupRoomForAdmin,
   deleteMember,
+  getRoomMembersForAdmin,
   getMembers,
+  listGroupRoomsForAdmin,
   loginGroupRoom,
   normalizeRoomNumber,
   saveMembers
@@ -56,7 +60,7 @@ import type { GroupRoom, Member } from "@/types/group";
 const MIN_BIRTH_YEAR = 1900;
 const INITIAL_BIRTH_YEAR = 1980;
 
-type AuthView = "landing" | "create" | "login" | "room";
+type AuthView = "landing" | "create" | "login" | "room" | "admin";
 
 type FormState = {
   name: string;
@@ -105,6 +109,52 @@ function formatBirthCompact(birthDate: string) {
 function formatTimeLabel(birthTime: string) {
   const [hour, minute] = birthTime.split(":");
   return `${Number(hour)}시 ${minute}분`;
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+function getStorageUserMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const firebaseIssue =
+    message.includes("Firebase") ||
+    message.includes("Firestore") ||
+    message.includes("permission-denied") ||
+    message.includes("Missing env") ||
+    message.includes("environment variables");
+
+  if (firebaseIssue) {
+    return "who-is-main-today Firebase 연결에 실패했습니다. 프로젝트 루트의 .env.local 또는 Vercel 환경변수와 Firestore 권한 설정을 확인해주세요.";
+  }
+  if (message.includes("Room number is already in use")) {
+    return "이미 사용 중인 그룹방 번호입니다.";
+  }
+  if (message.includes("Room number is required")) {
+    return "그룹방 번호를 숫자로 입력해 주세요.";
+  }
+  if (message.includes("Password is required")) {
+    return "비밀번호를 입력해 주세요.";
+  }
+  if (message.includes("Room number is invalid")) {
+    return "그룹방 번호가 올바르지 않습니다.";
+  }
+
+  return message || "요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.";
+}
+
+function isAdminCredential(roomNumber: string, password: string) {
+  // Demo-only admin shortcut. In a real service, handle admin auth with Firebase Auth or a server API.
+  return normalizeRoomNumber(roomNumber) === "0202" && password.trim() === "0425";
 }
 
 function Character({
@@ -1200,6 +1250,12 @@ export function FortuneApp() {
   const [avatarTargetId, setAvatarTargetId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [authMessage, setAuthMessage] = useState("");
+  const [adminRooms, setAdminRooms] = useState<AdminGroupRoomSummary[]>([]);
+  const [adminSelectedRoom, setAdminSelectedRoom] =
+    useState<AdminGroupRoomSummary | null>(null);
+  const [adminMembers, setAdminMembers] = useState<Member[]>([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState("");
   const dateKey = useMemo(() => getLocalDateKey(), []);
 
   const previewFortunes = useMemo(
@@ -1242,6 +1298,84 @@ export function FortuneApp() {
     setError("");
   }
 
+  function resetAdminUi() {
+    setAdminRooms([]);
+    setAdminSelectedRoom(null);
+    setAdminMembers([]);
+    setAdminLoading(false);
+    setAdminError("");
+  }
+
+  async function loadAdminRooms() {
+    setAdminLoading(true);
+    setAdminError("");
+    try {
+      const rooms = await listGroupRoomsForAdmin();
+      setAdminRooms(rooms);
+    } catch (adminLoadError) {
+      console.error("[Firestore] 관리자 그룹방 목록 불러오기 실패", adminLoadError);
+      setAdminError(getStorageUserMessage(adminLoadError));
+    } finally {
+      setAdminLoading(false);
+    }
+  }
+
+  async function enterAdminMode() {
+    resetRoomUi();
+    setActiveRoom(null);
+    setPeople([]);
+    setAuthView("admin");
+    setAuthMessage("");
+    setLoginForm({ roomNumber: "", password: "" });
+    await loadAdminRooms();
+  }
+
+  function leaveAdminMode() {
+    resetAdminUi();
+    setAuthView("landing");
+    setAuthMessage("");
+  }
+
+  async function openAdminRoom(room: AdminGroupRoomSummary) {
+    setAdminLoading(true);
+    setAdminError("");
+    try {
+      const members = await getRoomMembersForAdmin(room.roomNumber);
+      setAdminSelectedRoom(room);
+      setAdminMembers(members);
+    } catch (adminRoomError) {
+      console.error("[Firestore] 관리자 그룹방 상세 불러오기 실패", adminRoomError);
+      setAdminError(getStorageUserMessage(adminRoomError));
+    } finally {
+      setAdminLoading(false);
+    }
+  }
+
+  async function deleteAdminRoom(room: AdminGroupRoomSummary) {
+    const confirmed = window.confirm(
+      "정말로 이 그룹방과 그 안의 모든 후보 데이터를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다."
+    );
+    if (!confirmed) return;
+
+    setAdminLoading(true);
+    setAdminError("");
+    try {
+      await deleteGroupRoomForAdmin(room.roomNumber);
+      setAdminRooms((current) =>
+        current.filter((item) => item.roomNumber !== room.roomNumber)
+      );
+      if (adminSelectedRoom?.roomNumber === room.roomNumber) {
+        setAdminSelectedRoom(null);
+        setAdminMembers([]);
+      }
+    } catch (adminDeleteError) {
+      console.error("[Firestore] 관리자 그룹방 삭제 실패", adminDeleteError);
+      setAdminError(getStorageUserMessage(adminDeleteError));
+    } finally {
+      setAdminLoading(false);
+    }
+  }
+
   async function enterRoom(room: GroupRoom) {
     const members = await getMembers(room.roomNumber);
     setActiveRoom(room);
@@ -1260,7 +1394,7 @@ export function FortuneApp() {
           console.error("[Firestore] 후보 목록 저장 실패", storageError);
           setError(
             storageError instanceof Error
-              ? storageError.message
+              ? getStorageUserMessage(storageError)
               : "후보 정보를 Firebase에 저장하지 못했습니다."
           );
           setPeople(current);
@@ -1294,7 +1428,7 @@ export function FortuneApp() {
       setRoomCheck({ roomNumber: "", status: "idle" });
       setAuthMessage(
         roomError instanceof Error
-          ? roomError.message
+          ? getStorageUserMessage(roomError)
           : "Firebase에서 그룹방 번호를 확인하지 못했습니다."
       );
     }
@@ -1331,7 +1465,7 @@ export function FortuneApp() {
       console.error("[Firestore] 그룹방 생성 실패", roomError);
       setAuthMessage(
         roomError instanceof Error
-          ? roomError.message
+          ? getStorageUserMessage(roomError)
           : "그룹방을 만들 수 없습니다."
       );
     }
@@ -1343,6 +1477,16 @@ export function FortuneApp() {
     const password = loginForm.password.trim();
     if (!roomNumber || !password) {
       setAuthMessage("그룹방 번호와 비밀번호를 입력해 주세요.");
+      return;
+    }
+
+    if (isAdminCredential(roomNumber, password)) {
+      try {
+        await enterAdminMode();
+      } catch (adminError) {
+        console.error("[Firestore] 관리자 모드 진입 실패", adminError);
+        setAuthMessage(getStorageUserMessage(adminError));
+      }
       return;
     }
 
@@ -1359,7 +1503,7 @@ export function FortuneApp() {
       console.error("[Firestore] 그룹방 로그인 실패", roomError);
       setAuthMessage(
         roomError instanceof Error
-          ? roomError.message
+          ? getStorageUserMessage(roomError)
           : "Firebase에서 그룹방 정보를 불러오지 못했습니다."
       );
     }
@@ -1457,7 +1601,7 @@ export function FortuneApp() {
         console.error("[Firestore] 후보 삭제 실패", storageError);
         setError(
           storageError instanceof Error
-            ? storageError.message
+            ? getStorageUserMessage(storageError)
             : "후보 정보를 Firebase에서 삭제하지 못했습니다."
         );
       });
@@ -1509,6 +1653,207 @@ export function FortuneApp() {
   }
 
   const shownRankings = rankings.length ? rankings : previewFortunes;
+
+  if (authView === "admin") {
+    return (
+      <main className="fortune-app min-h-screen overflow-hidden text-[#403653]">
+        <div className="magic-orb magic-orb-one" />
+        <div className="magic-orb magic-orb-two" />
+        <div className="relative mx-auto max-w-6xl px-4 pb-20 pt-5 sm:px-6 sm:pt-8 lg:px-8">
+          <header className="flex flex-col gap-4 rounded-[28px] border border-white/70 bg-white/70 px-5 py-4 shadow-[0_12px_38px_rgba(86,61,120,.08)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="grid h-12 w-12 place-items-center rounded-[18px] bg-gradient-to-br from-[#58436f] to-[#9f7bd1] text-white shadow-[0_10px_22px_rgba(86,61,120,.22)]">
+                <UsersRound className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-xs font-black tracking-[.18em] text-[#9b80bd]">
+                  ADMIN MODE
+                </p>
+                <h1 className="text-2xl font-black tracking-[-.04em] text-[#3c2d54]">
+                  관리자 모드
+                </h1>
+                <p className="text-sm font-bold text-[#9a8eaa]">
+                  전체 그룹방 관리
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={loadAdminRooms}
+                disabled={adminLoading}
+                className="focus-ring min-h-11 rounded-full border border-[#dfd4e8] bg-white px-4 text-sm font-black text-[#715885] transition hover:-translate-y-0.5 hover:bg-[#fbf8ff] disabled:opacity-55"
+              >
+                새로고침
+              </button>
+              <button
+                type="button"
+                onClick={leaveAdminMode}
+                className="focus-ring min-h-11 rounded-full bg-[#58436f] px-4 text-sm font-black text-white shadow-[0_10px_22px_rgba(75,52,99,.18)] transition hover:-translate-y-0.5"
+              >
+                관리자 모드 종료
+              </button>
+            </div>
+          </header>
+
+          {adminError ? (
+            <p className="mt-5 rounded-2xl bg-[#fff0f2] px-4 py-3 text-sm font-bold text-[#cb5771]">
+              {adminError}
+            </p>
+          ) : null}
+
+          <section className="mt-7 rounded-[32px] border border-white bg-white/75 p-5 shadow-[0_18px_55px_rgba(91,65,120,.09)] backdrop-blur sm:p-7">
+            {adminSelectedRoom ? (
+              <>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAdminSelectedRoom(null);
+                        setAdminMembers([]);
+                      }}
+                      className="focus-ring mb-4 inline-flex min-h-10 items-center rounded-full border border-[#dfd4e8] bg-white px-4 text-sm font-black text-[#715885]"
+                    >
+                      ← 전체 목록으로
+                    </button>
+                    <p className="text-xs font-black tracking-[.16em] text-[#9b80bd]">
+                      ROOM DETAIL
+                    </p>
+                    <h2 className="mt-1 text-3xl font-black text-[#403157]">
+                      그룹방 {adminSelectedRoom.roomNumber}
+                    </h2>
+                    <p className="mt-1 text-sm font-bold text-[#9588a4]">
+                      멤버 {adminMembers.length}명
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => deleteAdminRoom(adminSelectedRoom)}
+                    disabled={adminLoading}
+                    className="focus-ring min-h-11 rounded-full bg-[#fff0f2] px-4 text-sm font-black text-[#d75772] transition hover:bg-[#ffe5ea] disabled:opacity-55"
+                  >
+                    이 그룹방 삭제
+                  </button>
+                </div>
+
+                {adminMembers.length ? (
+                  <div className="mt-6 grid gap-3 md:grid-cols-2">
+                    {adminMembers.map((member) => (
+                      <article
+                        key={member.id}
+                        className="rounded-[24px] border border-[#eee8f4] bg-white p-4 shadow-[0_10px_28px_rgba(91,65,120,.07)]"
+                      >
+                        <div className="flex items-start gap-3">
+                          <Character person={member} size="small" />
+                          <div className="min-w-0 flex-1">
+                            <h3 className="truncate text-xl font-black text-[#3f3158]">
+                              {member.name}
+                            </h3>
+                            <div className="mt-2 grid gap-1 text-sm font-bold leading-6 text-[#786c84]">
+                              <p>성별: {member.gender === "female" ? "여성" : "남성"}</p>
+                              <p>생년월일: {member.birthDate}</p>
+                              <p>생시: {member.birthTime}</p>
+                              <p>캐릭터: {member.avatarId ?? "-"}</p>
+                              <p>생성일: {formatDateTime(member.createdAt)}</p>
+                              <p>수정일: {formatDateTime(member.updatedAt)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-6 rounded-[26px] border-2 border-dashed border-[#e4d9ec] bg-white/50 p-8 text-center">
+                    <p className="text-lg font-black text-[#61536f]">
+                      아직 등록된 후보가 없습니다
+                    </p>
+                    <p className="mt-1 text-sm font-bold text-[#9b90a4]">
+                      새 그룹방은 후보가 입력되기 전까지 members 하위 컬렉션이 비어 있습니다.
+                    </p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <p className="text-xs font-black tracking-[.16em] text-[#9b80bd]">
+                      ALL GROUP ROOMS
+                    </p>
+                    <h2 className="mt-1 text-3xl font-black text-[#403157]">
+                      전체 그룹방 목록
+                    </h2>
+                  </div>
+                  <p className="text-sm font-bold text-[#9588a4]">
+                    총 {adminRooms.length}개
+                  </p>
+                </div>
+
+                {adminLoading && !adminRooms.length ? (
+                  <div className="mt-6 rounded-[26px] bg-white/55 p-8 text-center text-sm font-black text-[#7c6f8a]">
+                    그룹방 목록을 불러오는 중입니다...
+                  </div>
+                ) : adminRooms.length ? (
+                  <div className="mt-6 grid gap-3 md:grid-cols-2">
+                    {adminRooms.map((room) => (
+                      <article
+                        key={room.roomNumber}
+                        className="rounded-[24px] border border-[#eee8f4] bg-white p-5 shadow-[0_10px_28px_rgba(91,65,120,.07)]"
+                      >
+                        <div className="flex flex-col gap-4">
+                          <div>
+                            <p className="text-xs font-black tracking-[.14em] text-[#9b80bd]">
+                              GROUP ROOM
+                            </p>
+                            <h3 className="mt-1 text-2xl font-black text-[#3f3158]">
+                              {room.roomNumber}
+                            </h3>
+                            <div className="mt-3 grid gap-1 text-sm font-bold leading-6 text-[#786c84]">
+                              <p>멤버 수: {room.memberCount}명</p>
+                              <p>생성일: {formatDateTime(room.createdAt)}</p>
+                              <p>수정일: {formatDateTime(room.updatedAt)}</p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openAdminRoom(room)}
+                              disabled={adminLoading}
+                              className="focus-ring min-h-11 rounded-full bg-[#f5efff] px-4 text-sm font-black text-[#7652ad] transition hover:bg-[#efe4ff] disabled:opacity-55"
+                            >
+                              보기
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => deleteAdminRoom(room)}
+                              disabled={adminLoading}
+                              className="focus-ring min-h-11 rounded-full bg-[#fff0f2] px-4 text-sm font-black text-[#d75772] transition hover:bg-[#ffe5ea] disabled:opacity-55"
+                            >
+                              삭제
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-6 rounded-[26px] border-2 border-dashed border-[#e4d9ec] bg-white/50 p-8 text-center">
+                    <p className="text-lg font-black text-[#61536f]">
+                      아직 생성된 그룹방이 없습니다
+                    </p>
+                    <p className="mt-1 text-sm font-bold text-[#9b90a4]">
+                      사용자가 그룹방을 만들면 Firestore의 groupRooms 컬렉션에 표시됩니다.
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+        </div>
+      </main>
+    );
+  }
 
   if (authView !== "room" || !activeRoom) {
     return (

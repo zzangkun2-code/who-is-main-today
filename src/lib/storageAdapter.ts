@@ -12,7 +12,7 @@ export function getLocalStorageAdapter(): StorageAdapter | null {
   }
 
   try {
-    const testKey = "__today-main-character-storage-test__";
+    const testKey = "__who-is-main-today-storage-test__";
     window.localStorage.setItem(testKey, "1");
     window.localStorage.removeItem(testKey);
     return window.localStorage;

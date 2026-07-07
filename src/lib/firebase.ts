@@ -1,41 +1,42 @@
-import { getApps, initializeApp, type FirebaseApp, type FirebaseOptions } from "firebase/app";
+import { getApp, getApps, initializeApp, type FirebaseApp, type FirebaseOptions } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
 
-const firebaseEnv = {
-  NEXT_PUBLIC_FIREBASE_API_KEY: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  NEXT_PUBLIC_FIREBASE_PROJECT_ID: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID:
-    process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
-};
+const requiredFirebaseEnvKeys = [
+  "NEXT_PUBLIC_FIREBASE_API_KEY",
+  "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN",
+  "NEXT_PUBLIC_FIREBASE_PROJECT_ID",
+  "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET",
+  "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID",
+  "NEXT_PUBLIC_FIREBASE_APP_ID"
+] as const;
 
-const missingFirebaseEnvKeys = Object.entries(firebaseEnv)
-  .filter(([, value]) => !value)
-  .map(([key]) => key);
+const missingFirebaseEnvKeys = requiredFirebaseEnvKeys.filter(
+  (key) => !process.env[key]
+);
 
 if (missingFirebaseEnvKeys.length > 0) {
   console.error(
-    "[Firebase] 필요한 환경변수가 누락되었습니다:",
-    missingFirebaseEnvKeys.join(", ")
+    "[who-is-main-today Firebase] Missing required environment variables:",
+    missingFirebaseEnvKeys
   );
 }
 
 const firebaseConfig: FirebaseOptions = {
-  apiKey: firebaseEnv.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: firebaseEnv.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: firebaseEnv.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: firebaseEnv.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: firebaseEnv.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: firebaseEnv.NEXT_PUBLIC_FIREBASE_APP_ID
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
 export const hasFirebaseConfig = missingFirebaseEnvKeys.length === 0;
 
 export const firebaseApp: FirebaseApp | null = hasFirebaseConfig
-  ? getApps()[0] ?? initializeApp(firebaseConfig)
+  ? getApps().length
+    ? getApp()
+    : initializeApp(firebaseConfig)
   : null;
 
 export const auth: Auth | null = firebaseApp ? getAuth(firebaseApp) : null;
@@ -44,8 +45,8 @@ export const db: Firestore | null = firebaseApp ? getFirestore(firebaseApp) : nu
 export function requireAuth() {
   if (!auth) {
     throw new Error(
-      `Firebase Auth가 초기화되지 않았습니다. 누락된 환경변수: ${
-        missingFirebaseEnvKeys.join(", ") || "없음"
+      `who-is-main-today Firebase Auth is not initialized. Missing env keys: ${
+        missingFirebaseEnvKeys.join(", ") || "none"
       }`
     );
   }
@@ -55,8 +56,8 @@ export function requireAuth() {
 export function requireDb() {
   if (!db) {
     throw new Error(
-      `Firebase Firestore가 초기화되지 않았습니다. 누락된 환경변수: ${
-        missingFirebaseEnvKeys.join(", ") || "없음"
+      `who-is-main-today Firebase Firestore is not initialized. Missing env keys: ${
+        missingFirebaseEnvKeys.join(", ") || "none"
       }`
     );
   }

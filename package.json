@@ -10,20 +10,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@fullcalendar/core": "^6.1.15",
-    "@fullcalendar/daygrid": "^6.1.15",
-    "@fullcalendar/interaction": "^6.1.15",
-    "@fullcalendar/react": "^6.1.15",
-    "@fullcalendar/timegrid": "^6.1.15",
-    "clsx": "^2.1.1",
-    "date-fns": "^3.6.0",
     "firebase": "^10.14.1",
-    "firebase-admin": "^12.7.0",
     "lucide-react": "^0.468.0",
     "next": "^14.2.15",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "tailwind-merge": "^2.5.4"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/node": "^22.8.7",

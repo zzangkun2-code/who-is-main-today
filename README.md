@@ -1,104 +1,89 @@
-# 국제교류수업사업 관리 웹앱
+# 오늘의 주인공은?
 
-국제교류수업사업을 관리하는 Next.js + Firebase 웹앱입니다. 인증은 Firebase Email/Password Auth로 통일되어 있으며, 회원가입은 없습니다. 관리자가 참여학교 계정을 직접 발급합니다.
+`who-is-main-today`는 그룹방에 모인 사람들 중 오늘 가장 빛나는 사람을 뽑아보는 Next.js + Firebase 웹앱입니다.
 
-## 설치 명령어
+## 실행
 
 ```bash
 npm install
 npm run dev
 ```
 
-## 핵심 라이브러리
+## 주요 기능
 
-- Next.js / React / TypeScript
-- Tailwind CSS
-- Firebase Auth, Firestore
-- Firebase Admin SDK
-- FullCalendar
-- lucide-react
+- 그룹방 개설 / 기존 그룹방 로그인
+- 그룹방별 후보자 저장
+- 후보자 입력, 수정, 삭제
+- 날짜별 고정 운세 점수
+- 1~3등 시상대와 1등 축하 팝업
+- 전체 순위 보기
+- 사람별 5가지 상세 운세 보기
+- Firestore 기본 저장, localStorage fallback
+- 모바일 반응형 UI
 
-## 디렉토리 구조
+## 환경변수
+
+프로젝트 루트의 `.env.local` 파일에 Firebase Web App 설정값을 넣습니다.
+Vercel 배포 환경에서는 `.env.local`이 자동으로 올라가지 않으므로 Vercel 프로젝트의 Environment Variables에도 같은 값을 추가해야 합니다.
 
 ```txt
-src/
-  app/
-    api/admin/schools/route.ts
-    globals.css
-    layout.tsx
-    page.tsx
-  components/
-    admin/
-      AdminCalendar.tsx
-      AdminDashboard.tsx
-      FaqManager.tsx
-      SchoolAccountManager.tsx
-      SchoolCard.tsx
-    calendar/
-      ScheduleDetailModal.tsx
-      ScheduleCalendar.tsx
-      ScheduleFormModal.tsx
-    dashboard/
-      SchoolTabs.tsx
-      UserDashboard.tsx
-    faq/
-      FaqViewerModal.tsx
-    video/
-      VideoLinkManager.tsx
-    ui/
-    AppRouter.tsx
-    AuthProvider.tsx
-    LoginScreen.tsx
-    MissingProfileNotice.tsx
-    PasswordChangeModal.tsx
-  lib/
-    admin-api.ts
-    constants.ts
-    csv.ts
-    firebase-admin.ts
-    firebase.ts
-    firestore.ts
-    types.ts
-    utils.ts
-docs/
-  firebase-schema.md
-firestore.rules
+NEXT_PUBLIC_FIREBASE_API_KEY=
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+NEXT_PUBLIC_FIREBASE_APP_ID=
 ```
 
-## Firebase 설정
-
-`.env.example`을 `.env.local`로 복사한 뒤 Firebase 웹 앱 설정 값과 Admin SDK 서비스 계정 값을 넣습니다.
+`.env.local.example` 파일을 복사해서 사용할 수 있습니다.
 
 ```bash
-cp .env.example .env.local
+cp .env.local.example .env.local
 ```
 
-Firebase Console에서 Email/Password 로그인을 활성화하고 Firestore를 생성합니다.
+## Firebase / Firestore 구조
 
-관리자 준비 순서:
-
-1. Firebase Auth에서 교육청 공용 관리자 이메일/비밀번호 계정을 생성합니다.
-2. 생성된 관리자 UID로 Firestore에 `admins/{uid}` 문서를 만듭니다.
-3. 관리자 계정으로 로그인한 뒤 앱의 `계정 발급` 메뉴에서 `26e01` 형식의 학교 ID와 초기 비밀번호를 생성합니다.
-
-학교 ID 규칙:
+Firestore에는 아래 구조로 저장됩니다.
 
 ```txt
-26e01 = 2026년 초등학교 01번
-26m01 = 2026년 중학교 01번
-26h01 = 2026년 고등학교 01번
+groupRooms/{roomNumber}
+  roomNumber
+  password
+  createdAt
+  updatedAt
+
+groupRooms/{roomNumber}/members/{memberId}
+  id
+  roomNumber
+  name
+  gender
+  birthDate
+  birthTime
+  avatarId
+  createdAt
+  updatedAt
 ```
 
-학교는 로그인 화면에서 `26e01`만 입력합니다. 앱이 내부적으로 `26e01@exchange.jbe.kr`로 바꿔 Firebase Auth에 로그인합니다.
+현재 클라이언트 단계에서는 호환을 위해 `password` 필드를 사용합니다. 실제 서비스에서 보안을 강화하려면 서버 API route, Firebase Functions, Firebase Auth 등을 통해 `passwordHash` 방식으로 바꾸는 것이 안전합니다.
 
-영상 링크 구조:
+## Firebase Console에서 확인할 것
 
-- 참여학교는 각 사업 탭에서 영상 링크 5개를 제출하고 수정할 수 있습니다.
-- 영상 링크는 `schools/{학교 UID}` 문서의 `videoLinks` 필드에 저장됩니다.
-- 관리자는 학교 관리 화면의 `영상 링크` 탭과 캘린더 상세보기에서 제출 링크를 확인합니다.
+1. Firebase 프로젝트 ID가 `.env.local`의 `NEXT_PUBLIC_FIREBASE_PROJECT_ID`와 같은지 확인합니다.
+2. Firestore Database가 생성되어 있는지 확인합니다.
+3. Firestore Rules에서 그룹방 생성과 후보자 저장이 허용되는지 확인합니다.
+4. Vercel에도 같은 `NEXT_PUBLIC_FIREBASE_*` 환경변수를 등록한 뒤 Redeploy합니다.
 
-보안 구조:
+## localStorage fallback
 
-- 참여학교는 `schools/{본인 UID}`와 그 하위 일정만 읽고 씁니다.
-- 참여학교는 `faqs` 컬렉션을 읽기만 할 수 있습니다.
-- `admins/{관리자 UID}` 문서가 있는 관리자 계정은 Firestore 전체 권한을 가집니다.
+Firebase 연결 또는 권한 문제가 있으면 개발 중 앱이 완전히 멈추지 않도록 localStorage fallback이 동작합니다.
+fallback 저장 키는 `who-is-main-today` 기준으로 관리됩니다.
+
+- `who-is-main-today-rooms`
+- `who-is-main-today-room-members:{roomNumber}`
+
+예전 테스트 단계에서 사용한 저장 키가 브라우저에 남아 있으면 가능한 범위에서 새 키로 자동 마이그레이션합니다.
+
+## 관리자 모드
+
+관리자 모드 진입용 임시 키는 `0202 / 0425`입니다.
+실제 서비스에서는 이 방식 대신 Firebase Auth 또는 서버 API에서 관리자 인증을 처리하는 것이 안전합니다.
