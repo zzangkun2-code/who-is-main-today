@@ -43,6 +43,10 @@ import {
   isAvatarIdForGender
 } from "@/lib/avatar";
 import {
+  firebaseProjectId,
+  missingFirebaseConfigKeys
+} from "@/lib/firebase";
+import {
   type AdminGroupRoomSummary,
   addMember,
   checkRoomNumberAvailable,
@@ -154,6 +158,48 @@ function getStorageUserMessage(error: unknown) {
   }
 
   return message || "요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.";
+}
+
+function getFirebaseErrorCode(error: unknown) {
+  if (!error || typeof error !== "object") return "";
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : "";
+}
+
+function getFirebaseErrorMessage(error: unknown) {
+  if (!error) return "";
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+function getStorageFailureNotice(error?: unknown) {
+  if (missingFirebaseConfigKeys.length > 0) {
+    return `임시 저장 모드: 배포된 앱에 Firebase 환경변수가 빠져 있습니다. 누락: ${missingFirebaseConfigKeys.join(
+      ", "
+    )}. Vercel Environment Variables에 추가한 뒤 Redeploy 해주세요.`;
+  }
+
+  const code = getFirebaseErrorCode(error);
+  const message = getFirebaseErrorMessage(error);
+  const projectHint = firebaseProjectId
+    ? `현재 앱의 Firebase projectId는 ${firebaseProjectId}입니다.`
+    : "Firebase projectId를 확인하지 못했습니다.";
+
+  if (code === "permission-denied") {
+    return `임시 저장 모드: Firestore 권한 거부(permission-denied)입니다. Firebase Console > Firestore Database > 규칙에서 groupRooms/members 읽기·쓰기를 허용하고 '게시'를 눌러주세요. ${projectHint}`;
+  }
+
+  if (code === "unavailable" || code === "deadline-exceeded") {
+    return `임시 저장 모드: Firestore 네트워크 연결이 불안정합니다(${code}). 잠시 후 새로고침해 주세요. ${projectHint}`;
+  }
+
+  if (code === "failed-precondition") {
+    return `임시 저장 모드: Firestore 설정 조건이 맞지 않습니다(${code}). Firestore Database가 생성되어 있는지 확인해 주세요. ${projectHint}`;
+  }
+
+  return `임시 저장 모드: Firestore 연결에 실패했습니다${
+    code ? `(${code})` : ""
+  }. ${projectHint}${message ? ` 오류 원문: ${message}` : ""}`;
 }
 
 function isAdminCredential(roomNumber: string, password: string) {
@@ -1308,7 +1354,7 @@ export function FortuneApp() {
     setStorageNotice(
       hasFirestoreStorage()
         ? "서버 저장소와 연결을 확인하고 있어요."
-        : "임시 저장 모드입니다. Firebase 환경변수 또는 연결 상태를 확인해 주세요."
+        : getStorageFailureNotice()
     );
 
     const loadFallbackMembers = async () => {
@@ -1321,6 +1367,7 @@ export function FortuneApp() {
         console.error("[who-is-main-today Firebase] 후보 목록 fallback 불러오기 실패", loadError);
         if (!cancelled) {
           setError(getStorageUserMessage(loadError));
+          setStorageNotice(getStorageFailureNotice(loadError));
         }
       }
     };
@@ -1344,9 +1391,7 @@ export function FortuneApp() {
         }
 
         setStorageMode("local");
-        setStorageNotice(
-          "임시 저장 모드: 현재 기기에만 저장됩니다. Firebase 환경변수와 Firestore Rules를 확인해 주세요."
-        );
+        setStorageNotice(getStorageFailureNotice(status.error));
         void loadFallbackMembers();
       }
     );

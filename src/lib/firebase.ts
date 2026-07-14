@@ -15,6 +15,10 @@ const missingFirebaseEnvKeys = requiredFirebaseEnvKeys.filter(
   (key) => !process.env[key]
 );
 
+export const missingFirebaseConfigKeys = missingFirebaseEnvKeys;
+export const firebaseProjectId =
+  process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "";
+
 if (missingFirebaseEnvKeys.length > 0) {
   console.error(
     "[who-is-main-today Firebase] Missing required environment variables:",
