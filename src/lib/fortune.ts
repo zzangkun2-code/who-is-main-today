@@ -10,6 +10,7 @@ export type Person = {
   gender: Gender;
   birthDate: string;
   birthTime: string;
+  birthTimeUnknown?: boolean;
   avatarId?: string;
 };
 
@@ -186,7 +187,9 @@ function getTodayElement(dateKey: string): FiveElement {
 }
 
 function getTimeEnergy(birthTime: string) {
-  const hour = Number(birthTime.slice(0, 2));
+  const effectiveBirthTime =
+    !birthTime || birthTime === "unknown" ? "12:00" : birthTime;
+  const hour = Number(effectiveBirthTime.slice(0, 2));
   if (hour >= 5 && hour <= 8) {
     return { element: "목" as const, label: "아침의 목 기운" };
   }

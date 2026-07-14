@@ -402,11 +402,84 @@ body {
   margin-top: 0.9rem;
 }
 
+.unknown-time-toggle {
+  display: inline-flex;
+  min-height: 3.05rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  margin-bottom: 0.7rem;
+  border: 1px solid #eadff1;
+  border-radius: 0.95rem;
+  background: #fff;
+  padding: 0.65rem 1rem;
+  color: #756584;
+  font-size: 0.98rem;
+  font-weight: 900;
+  box-shadow: 0 6px 14px rgba(91, 65, 120, 0.05);
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.unknown-time-toggle:hover {
+  border-color: #cba9eb;
+  background: #faf6ff;
+  box-shadow: 0 10px 20px rgba(91, 65, 120, 0.09);
+  transform: translateY(-1px);
+}
+
+.unknown-time-toggle-selected,
+.unknown-time-toggle-selected:hover {
+  border-color: transparent;
+  background: linear-gradient(135deg, #7f5bc3, #ef83aa);
+  color: white;
+  box-shadow: 0 12px 24px rgba(133, 84, 184, 0.28);
+}
+
+.time-grid-disabled {
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+.time-grid-disabled .time-option {
+  background: #f7f3fa;
+  color: #b6abbf;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 .time-picker-section > p {
   margin: 0 0 0.45rem;
   color: #5a4c6c;
   font-size: 0.98rem;
   font-weight: 900;
+}
+
+.privacy-consent-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  border: 1px solid #eadff1;
+  border-radius: 1.15rem;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 0.85rem 1rem;
+  color: #74687f;
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1.55;
+  word-break: keep-all;
+}
+
+.privacy-consent-card input {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: 0 0 auto;
+  margin-top: 0.15rem;
+  accent-color: #8a62ca;
+}
+
+.privacy-consent-card span {
+  min-width: 0;
 }
 
 .candidate-card {

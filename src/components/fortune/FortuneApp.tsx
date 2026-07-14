@@ -75,6 +75,8 @@ type FormState = {
   gender: Gender;
   birthDate: string;
   birthTime: string;
+  birthTimeUnknown: boolean;
+  privacyConsent: boolean;
 };
 
 type RoomFormState = {
@@ -87,7 +89,9 @@ const emptyForm: FormState = {
   name: "",
   gender: "female",
   birthDate: "",
-  birthTime: ""
+  birthTime: "",
+  birthTimeUnknown: false,
+  privacyConsent: false
 };
 
 const emptyRoomForm: RoomFormState = {
@@ -114,8 +118,10 @@ function formatBirthCompact(birthDate: string) {
   return `${year.slice(2)}${month}${day}`;
 }
 
-function formatTimeLabel(birthTime: string) {
+function formatTimeLabel(birthTime: string, birthTimeUnknown = false) {
+  if (birthTimeUnknown || birthTime === "unknown") return "시간 잘 모름";
   const [hour, minute] = birthTime.split(":");
+  if (!hour || !minute) return "시간 잘 모름";
   return `${Number(hour)}시 ${minute}분`;
 }
 
@@ -809,9 +815,13 @@ function BirthDatePicker({
 
 function BirthTimePicker({
   value,
+  unknown,
+  onUnknownChange,
   onChange
 }: {
   value: string;
+  unknown: boolean;
+  onUnknownChange: (value: boolean) => void;
   onChange: (value: string) => void;
 }) {
   const normalized = normalizeBirthTime(value);
@@ -826,10 +836,12 @@ function BirthTimePicker({
   }, [selectedMinute]);
 
   function chooseHour(hour: string) {
+    if (unknown) return;
     onChange(`${hour}:${selectedMinute || "00"}`);
   }
 
   function chooseMinute(minute: string) {
+    if (unknown) return;
     onChange(`${selectedHour || "00"}:${minute}`);
   }
 
@@ -840,11 +852,31 @@ function BirthTimePicker({
       </legend>
       <div className="time-picker-summary">
         <Clock3 className="h-4 w-4 text-[#9a84b2]" />
-        {normalized ? `${Number(selectedHour)}시 ${selectedMinute}분 선택됨` : "시간을 선택해 주세요"}
+        {unknown
+          ? "태어난 시간을 잘 모름으로 저장해요"
+          : normalized
+            ? `${Number(selectedHour)}시 ${selectedMinute}분 선택됨`
+            : "시간을 선택해 주세요"}
       </div>
       <div className="time-picker-section">
+        <button
+          type="button"
+          onClick={() => onUnknownChange(!unknown)}
+          className={`focus-ring unknown-time-toggle ${
+            unknown ? "unknown-time-toggle-selected" : ""
+          }`}
+          aria-pressed={unknown}
+        >
+          {unknown ? <Check className="h-4 w-4" /> : <Clock3 className="h-4 w-4" />}
+          잘 모름
+        </button>
         <p>시</p>
-        <div className="hour-grid" role="listbox" aria-label="태어난 시 선택">
+        <div
+          className={`hour-grid ${unknown ? "time-grid-disabled" : ""}`}
+          role="listbox"
+          aria-label="태어난 시 선택"
+          aria-disabled={unknown}
+        >
           {Array.from({ length: 24 }, (_, index) => {
             const hour = String(index).padStart(2, "0");
             const selected = selectedHour === hour;
@@ -855,6 +887,7 @@ function BirthTimePicker({
                 data-hour={hour}
                 role="option"
                 aria-selected={selected}
+                disabled={unknown}
                 className={`focus-ring time-option ${
                   selected ? "time-option-selected" : ""
                 }`}
@@ -868,7 +901,12 @@ function BirthTimePicker({
       </div>
       <div className="time-picker-section">
         <p>분</p>
-        <div className="minute-grid" role="listbox" aria-label="태어난 분 선택">
+        <div
+          className={`minute-grid ${unknown ? "time-grid-disabled" : ""}`}
+          role="listbox"
+          aria-label="태어난 분 선택"
+          aria-disabled={unknown}
+        >
           {minuteOptions.map((minute) => {
             const selected = selectedMinute === minute;
             return (
@@ -878,6 +916,7 @@ function BirthTimePicker({
                 data-minute={minute}
                 role="option"
                 aria-selected={selected}
+                disabled={unknown}
                 className={`focus-ring time-option minute-option ${
                   selected ? "time-option-selected" : ""
                 }`}
@@ -939,7 +978,7 @@ function PersonCard({
           </div>
           <div className="candidate-meta-row">
             <span>{genderLabel}</span>
-            <span>{formatTimeLabel(person.birthTime)}</span>
+            <span>{formatTimeLabel(person.birthTime, person.birthTimeUnknown)}</span>
             <span className="candidate-zodiac">
               {zodiac.emoji} {zodiac.name}띠
             </span>
@@ -1624,10 +1663,22 @@ export function FortuneApp() {
       setError("먼저 그룹방에 입장해 주세요.");
       return;
     }
-    if (!form.name.trim() || !form.birthDate || !form.birthTime) {
+    if (!form.name.trim() || !form.birthDate || (!form.birthTimeUnknown && !form.birthTime)) {
       setError("이름, 생년월일, 태어난 시간을 모두 알려주세요.");
       return;
     }
+    if (!form.privacyConsent) {
+      setError("개인정보 활용 안내에 동의해야 후보를 추가하거나 수정할 수 있어요.");
+      return;
+    }
+
+    const memberPayload = {
+      name: form.name.trim(),
+      gender: form.gender,
+      birthDate: form.birthDate,
+      birthTime: form.birthTimeUnknown ? "unknown" : form.birthTime,
+      birthTimeUnknown: form.birthTimeUnknown
+    };
 
     try {
       if (editingId) {
@@ -1637,13 +1688,12 @@ export function FortuneApp() {
           return;
         }
 
-        const name = form.name.trim();
+        const name = memberPayload.name;
         const avatarId = isAvatarIdForGender(currentPerson.avatarId, form.gender)
           ? currentPerson.avatarId
           : getDefaultAvatarId(form.gender, `${currentPerson.id}-${name}`);
         const savedMember = await updateMember(activeRoom.roomNumber, editingId, {
-          ...form,
-          name,
+          ...memberPayload,
           avatarId
         });
 
@@ -1656,8 +1706,7 @@ export function FortuneApp() {
         }
       } else {
         const savedMember = await addMember(activeRoom.roomNumber, {
-          ...form,
-          name: form.name.trim(),
+          ...memberPayload,
           avatarId: getDefaultAvatarId(
             form.gender,
             `${activeRoom.roomNumber}-${form.name.trim()}-${people.length}`
@@ -1684,7 +1733,9 @@ export function FortuneApp() {
       name: person.name,
       gender: person.gender,
       birthDate: person.birthDate,
-      birthTime: person.birthTime
+      birthTime: person.birthTime === "unknown" ? "" : person.birthTime,
+      birthTimeUnknown: Boolean(person.birthTimeUnknown || person.birthTime === "unknown"),
+      privacyConsent: false
     });
     setEditingId(person.id);
     setError("");
@@ -1860,7 +1911,13 @@ export function FortuneApp() {
                             <div className="mt-2 grid gap-1 text-sm font-bold leading-6 text-[#786c84]">
                               <p>성별: {member.gender === "female" ? "여성" : "남성"}</p>
                               <p>생년월일: {member.birthDate}</p>
-                              <p>생시: {member.birthTime}</p>
+                              <p>
+                                생시:{" "}
+                                {formatTimeLabel(
+                                  member.birthTime,
+                                  member.birthTimeUnknown
+                                )}
+                              </p>
                               <p>캐릭터: {member.avatarId ?? "-"}</p>
                               <p>생성일: {formatDateTime(member.createdAt)}</p>
                               <p>수정일: {formatDateTime(member.updatedAt)}</p>
@@ -2437,8 +2494,19 @@ export function FortuneApp() {
                   />
                   <BirthTimePicker
                     value={form.birthTime}
+                    unknown={form.birthTimeUnknown}
+                    onUnknownChange={(birthTimeUnknown) =>
+                      setForm((current) => ({
+                        ...current,
+                        birthTimeUnknown
+                      }))
+                    }
                     onChange={(birthTime) =>
-                      setForm((current) => ({ ...current, birthTime }))
+                      setForm((current) => ({
+                        ...current,
+                        birthTime,
+                        birthTimeUnknown: false
+                      }))
                     }
                   />
                 </div>
@@ -2448,6 +2516,24 @@ export function FortuneApp() {
                     {error}
                   </p>
                 ) : null}
+
+                <label className="privacy-consent-card focus-within:ring-2 focus-within:ring-[#b996e7]">
+                  <input
+                    type="checkbox"
+                    checked={form.privacyConsent}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        privacyConsent: event.currentTarget.checked
+                      }))
+                    }
+                  />
+                  <span>
+                    입력한 이름, 성별, 생년월일, 태어난 시간 개인정보는
+                    ‘오늘의 주인공은?’ 앱 이용을 위한 운세 계산 및 그룹방 공유
+                    기능에만 사용됩니다.
+                  </span>
+                </label>
 
                 <div className="flex gap-3">
                   {editingId ? (
@@ -2465,7 +2551,8 @@ export function FortuneApp() {
                   ) : null}
                   <button
                     type="submit"
-                    className="focus-ring flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[#58436f] px-6 text-sm font-black text-white shadow-[0_12px_25px_rgba(75,52,99,.22)] transition hover:-translate-y-0.5 hover:bg-[#6c4f89]"
+                    disabled={!form.privacyConsent}
+                    className="focus-ring flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[#58436f] px-6 text-sm font-black text-white shadow-[0_12px_25px_rgba(75,52,99,.22)] transition hover:-translate-y-0.5 hover:bg-[#6c4f89] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     {editingId ? (
                       <>

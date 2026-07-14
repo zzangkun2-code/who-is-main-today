@@ -27,6 +27,7 @@ service cloud.firestore {
           'gender',
           'birthDate',
           'birthTime',
+          'birthTimeUnknown',
           'avatarId',
           'createdAt',
           'updatedAt'
@@ -37,6 +38,8 @@ service cloud.firestore {
         && request.resource.data.gender in ['female', 'male']
         && request.resource.data.birthDate is string
         && request.resource.data.birthTime is string
+        && (!('birthTimeUnknown' in request.resource.data)
+          || request.resource.data.birthTimeUnknown is bool)
         && request.resource.data.avatarId is string
         && request.resource.data.updatedAt is string;
     }

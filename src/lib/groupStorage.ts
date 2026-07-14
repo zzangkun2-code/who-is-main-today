@@ -142,6 +142,7 @@ function normalizeBirthDate(value: unknown) {
 function normalizeBirthTime(value: unknown) {
   if (typeof value !== "string" && typeof value !== "number") return "";
   const text = String(value).trim();
+  if (text === "unknown") return "unknown";
   const match = text.match(/^(\d{1,2})(?::?(\d{2}))?$/);
   if (!match) return "";
 
@@ -165,11 +166,17 @@ function normalizeMember(
   const birthDate = normalizeBirthDate(
     record.birthDate ?? record.birthday ?? record.dateOfBirth
   );
-  const birthTime = normalizeBirthTime(
-    record.birthTime ?? record.time ?? record.birthHour
-  );
+  const rawBirthTime = record.birthTime ?? record.time ?? record.birthHour;
+  const birthTimeUnknown =
+    record.birthTimeUnknown === true ||
+    rawBirthTime === null ||
+    rawBirthTime === undefined ||
+    String(rawBirthTime).trim() === "unknown";
+  const birthTime = birthTimeUnknown
+    ? "unknown"
+    : normalizeBirthTime(rawBirthTime);
 
-  if (!name || !birthDate || !birthTime) return null;
+  if (!name || !birthDate || (!birthTimeUnknown && !birthTime)) return null;
 
   const normalizedRoomNumber = normalizeRoomNumber(roomNumber);
   const id =
@@ -190,6 +197,7 @@ function normalizeMember(
     gender,
     birthDate,
     birthTime,
+    birthTimeUnknown,
     avatarId,
     createdAt:
       typeof record.createdAt === "string" ? record.createdAt : timestamp,
@@ -674,6 +682,8 @@ export async function addMember(roomNumber: string, member: MemberInput) {
     roomNumber: normalized,
     ...member,
     name: member.name.trim(),
+    birthTime: member.birthTimeUnknown ? "unknown" : member.birthTime,
+    birthTimeUnknown: Boolean(member.birthTimeUnknown),
     avatarId: isAvatarIdForGender(member.avatarId, member.gender)
       ? member.avatarId
       : getDefaultAvatarId(
@@ -756,10 +766,18 @@ function buildUpdatedMember(
   updatedMember: Partial<MemberInput>,
   timestamp: string
 ): Member {
+  const birthTimeUnknown =
+    updatedMember.birthTimeUnknown ?? current.birthTimeUnknown ?? false;
+  const birthTime = birthTimeUnknown
+    ? "unknown"
+    : updatedMember.birthTime ?? current.birthTime;
+
   return {
     ...current,
     ...updatedMember,
     name: updatedMember.name?.trim() ?? current.name,
+    birthTime,
+    birthTimeUnknown,
     avatarId: isAvatarIdForGender(
       updatedMember.avatarId ?? current.avatarId,
       updatedMember.gender ?? current.gender

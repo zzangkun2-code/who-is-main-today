@@ -23,6 +23,7 @@ export type MemberInput = {
   gender: Gender;
   birthDate: string;
   birthTime: string;
+  birthTimeUnknown?: boolean;
   avatarId?: string;
 };
 
