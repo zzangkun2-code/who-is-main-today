@@ -57,6 +57,8 @@ const categoryKeys: FortuneCategory["key"][] = [
   "lucky"
 ];
 
+const NEW_SCORING_START_DATE = "2026-07-15";
+
 const elementKeywords: Record<FiveElement, string[]> = {
   나무: ["성장", "시작", "확장", "관계", "아이디어", "생기"],
   불: ["표현", "주목", "열정", "명예", "인기", "활력"],
@@ -126,6 +128,19 @@ export function getLocalDateKey(date = new Date()) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function dateKeyToNumber(dateKey: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey);
+  if (!match) return Number.NaN;
+  const [, year, month, day] = match;
+  return Number(year) * 10000 + Number(month) * 100 + Number(day);
+}
+
+function shouldUseNewScoring(dateKey: string) {
+  const targetDate = dateKeyToNumber(dateKey);
+  const startDate = dateKeyToNumber(NEW_SCORING_START_DATE);
+  return Number.isFinite(targetDate) && targetDate >= startDate;
 }
 
 export function formatKoreanDate(dateKey: string) {
@@ -268,7 +283,7 @@ function buildEnergy(person: Person, dateKey: string): FortuneEnergy {
   };
 }
 
-function scoreCategory(
+function scoreLegacyCategory(
   key: FortuneCategory["key"],
   energy: FortuneEnergy,
   seed: string
@@ -300,7 +315,7 @@ function scoreCategory(
   );
 }
 
-function scoreTone(score: number) {
+function legacyScoreTone(score: number) {
   if (score >= 90) return "매우 밝은";
   if (score >= 82) return "안정적으로 좋은";
   if (score >= 74) return "차분히 올라오는";
@@ -324,7 +339,7 @@ function makeCategoryDescription(
   dateKey: string,
   energy: FortuneEnergy
 ) {
-  const tone = scoreTone(score);
+  const tone = legacyScoreTone(score);
   const birthKeyword = pick(
     elementKeywords[energy.birthElement],
     `${person.id}|${dateKey}|${key}|birth-keyword`
@@ -434,7 +449,7 @@ function makeRunnerUpMessage(
   return pick(variants, `${person.id}|${dateKey}|runner`);
 }
 
-export function calculateFortune(
+function calculateLegacyFortune(
   person: Person,
   dateKey = getLocalDateKey()
 ): DailyFortune {
@@ -447,7 +462,7 @@ export function calculateFortune(
   const categoryScores = Object.fromEntries(
     categoryKeys.map((key) => [
       key,
-      scoreCategory(key, energy, `${base}|${key}|score`)
+      scoreLegacyCategory(key, energy, `${base}|${key}|score`)
     ])
   ) as Record<FortuneCategory["key"], number>;
   const score = clamp(
@@ -487,6 +502,321 @@ export function calculateFortune(
     winnerPraise: makeWinnerPraise(person, dateKey, keyword, energy),
     runnerUpMessage: makeRunnerUpMessage(person, dateKey, keyword, energy)
   };
+}
+
+function getRoomNumberForSeed(person: Person) {
+  const roomNumber = (person as Person & { roomNumber?: unknown }).roomNumber;
+  return String(roomNumber ?? "local").trim() || "local";
+}
+
+function buildNewBaseSeed(person: Person, dateKey: string) {
+  return [
+    getRoomNumberForSeed(person),
+    person.id,
+    person.name,
+    person.gender,
+    person.birthDate,
+    person.birthTime,
+    dateKey
+  ].join("|");
+}
+
+function bucketedScore(seed: string) {
+  const roll = hash(seed) % 100;
+  const inner = hash(`${seed}|inner`);
+
+  if (roll < 16) return 60 + (inner % 10);
+  if (roll < 46) return 70 + (inner % 10);
+  if (roll < 80) return 80 + (inner % 10);
+  return 90 + (inner % 11);
+}
+
+function scoreNewCategory(
+  key: FortuneCategory["key"],
+  energy: FortuneEnergy,
+  seed: string
+) {
+  const categoryElement: Record<FortuneCategory["key"], FiveElement> = {
+    love: "불",
+    money: "금",
+    health: "흙",
+    relationship: "나무",
+    lucky: energy.todayElement
+  };
+  const targetElement = categoryElement[key];
+  const relationAdjustment = {
+    상생: 3,
+    "같은 기운": 2,
+    조율: 0,
+    긴장: -2
+  }[energy.relation];
+  const elementAdjustment =
+    targetElement === energy.todayElement
+      ? 3
+      : targetElement === energy.birthElement
+        ? 2
+        : generates[energy.todayElement] === targetElement ||
+            generates[energy.birthElement] === targetElement
+          ? 1
+          : controls[energy.todayElement] === targetElement
+            ? -2
+            : 0;
+
+  return clamp(bucketedScore(seed) + relationAdjustment + elementAdjustment, 60, 100);
+}
+
+function calculateOverallScore(
+  categoryScores: Record<FortuneCategory["key"], number>
+) {
+  const total = categoryKeys.reduce((sum, key) => sum + categoryScores[key], 0);
+  return clamp(Math.round(total / categoryKeys.length), 60, 100);
+}
+
+function newScoreTone(score: number) {
+  if (score >= 90) return "매우 빛나는";
+  if (score >= 80) return "좋은 기회가 열리는";
+  if (score >= 70) return "무난하지만 작은 선택이 중요한";
+  return "조심과 준비가 힘이 되는";
+}
+
+const categoryKeywordPool: Record<FortuneCategory["key"], string[]> = {
+  love: ["진심", "만남", "따뜻한 말", "설렘"],
+  money: ["실속", "정리", "작은 이익", "판단"],
+  health: ["회복", "리듬", "가벼움", "휴식"],
+  relationship: ["소통", "신뢰", "협력", "배려"],
+  lucky: ["작은 행운", "반짝임", "기회", "좋은 타이밍"]
+};
+
+function pickUniqueKeywords(pool: string[], seed: string, count = 3) {
+  const selected: string[] = [];
+  let attempt = 0;
+
+  while (selected.length < count && attempt < pool.length * 4) {
+    const keyword = pick(pool, `${seed}|keyword|${attempt}`);
+    if (!selected.includes(keyword)) selected.push(keyword);
+    attempt += 1;
+  }
+
+  return selected.length ? selected : ["집중력", "만남", "작은 행운"];
+}
+
+function makeNewKeyword(
+  person: Person,
+  dateKey: string,
+  energy: FortuneEnergy,
+  categoryScores: Record<FortuneCategory["key"], number>
+) {
+  const orderedKeys = [...categoryKeys].sort(
+    (a, b) => categoryScores[b] - categoryScores[a]
+  );
+  const pool = [
+    ...elementKeywords[energy.todayElement],
+    ...orderedKeys.flatMap((key) => categoryKeywordPool[key])
+  ];
+
+  return pickUniqueKeywords(
+    pool,
+    `${buildNewBaseSeed(person, dateKey)}|new-keyword`
+  ).join(" · ");
+}
+
+const categoryGoodLines: Record<FortuneCategory["key"], string[]> = {
+  love: [
+    "마음을 담은 말이 평소보다 부드럽게 전해지기 쉽습니다",
+    "작은 관심 표현이 관계의 온도를 살짝 올려 줍니다",
+    "상대의 반응을 읽는 감각이 좋아지는 흐름입니다"
+  ],
+  money: [
+    "필요한 것과 미뤄도 되는 것을 구분하기 좋은 날입니다",
+    "작은 절약이나 정리가 생각보다 큰 만족으로 이어질 수 있습니다",
+    "실속 있는 선택을 발견하기 쉬운 흐름입니다"
+  ],
+  health: [
+    "몸과 마음의 리듬을 다시 맞추기 좋은 날입니다",
+    "가벼운 움직임이 컨디션을 부드럽게 끌어올립니다",
+    "휴식의 질을 높이면 하루의 안정감이 커집니다"
+  ],
+  relationship: [
+    "사람들과의 흐름이 자연스럽게 맞아떨어질 수 있습니다",
+    "짧은 대화 속에서도 좋은 인상을 남기기 쉽습니다",
+    "협력과 배려가 관계의 분위기를 밝게 만듭니다"
+  ],
+  lucky: [
+    "작은 우연이 기분 좋은 방향으로 이어질 수 있습니다",
+    "평소 지나치던 선택지에서 반짝이는 힌트를 얻기 쉽습니다",
+    "소소한 물건이나 색감이 하루의 기분을 잘 받쳐 줍니다"
+  ]
+};
+
+const categoryCautionLines: Record<FortuneCategory["key"], string[]> = {
+  love: [
+    "마음이 앞서면 말의 온도가 조금 세게 느껴질 수 있습니다",
+    "기대가 커질수록 상대의 속도를 함께 살피는 편이 좋습니다",
+    "중요한 감정 표현은 한 번 더 다듬어 전하면 좋습니다"
+  ],
+  money: [
+    "즉흥적인 소비는 만족보다 아쉬움을 남길 수 있습니다",
+    "좋아 보이는 제안도 조건을 차분히 확인하는 편이 좋습니다",
+    "작은 지출이 겹치지 않도록 목록을 가볍게 정리해 주세요"
+  ],
+  health: [
+    "무리해서 속도를 내면 피로가 조금 빨리 쌓일 수 있습니다",
+    "컨디션이 괜찮아 보여도 쉬어 가는 시간을 놓치지 않는 편이 좋습니다",
+    "몸이 보내는 작은 신호를 가볍게 넘기지 않는 것이 좋습니다"
+  ],
+  relationship: [
+    "농담이나 짧은 말이 다르게 받아들여질 수 있으니 톤을 살펴 주세요",
+    "서두른 판단보다 한 번 더 듣는 태도가 관계를 편안하게 만듭니다",
+    "모두를 맞추려다 자신의 리듬을 잃지 않도록 조심해 주세요"
+  ],
+  lucky: [
+    "행운을 크게 잡으려 하기보다 작게 확인하는 태도가 좋습니다",
+    "한 번에 많은 일을 벌리면 좋은 흐름이 흩어질 수 있습니다",
+    "기분에만 기대기보다 작은 준비를 곁들이면 더 안정적입니다"
+  ]
+};
+
+const categoryAdviceLines: Record<FortuneCategory["key"], string[]> = {
+  love: [
+    "먼저 안부를 묻거나 고마움을 짧게 전해 보세요.",
+    "답을 서두르지 말고 대화의 여백을 조금 남겨 보세요.",
+    "부드러운 표현 하나가 오늘의 분위기를 바꿀 수 있습니다."
+  ],
+  money: [
+    "결제 전 한 번만 더 비교하면 실속을 챙기기 좋습니다.",
+    "오늘의 지출 기준을 간단히 정해 두면 마음이 편해집니다.",
+    "작은 정리부터 시작하면 금전운이 안정적으로 이어집니다."
+  ],
+  health: [
+    "물, 식사, 짧은 산책처럼 기본을 챙기면 충분합니다.",
+    "잠깐의 스트레칭이나 깊은 호흡이 좋은 전환점이 됩니다.",
+    "오늘은 오래 버티기보다 자주 회복하는 쪽이 유리합니다."
+  ],
+  relationship: [
+    "상대의 말을 한 박자 더 듣고 답하면 흐름이 좋아집니다.",
+    "부탁이나 제안은 짧고 분명하게 전하는 편이 좋습니다.",
+    "가벼운 칭찬 한마디가 관계의 문을 부드럽게 열어 줍니다."
+  ],
+  lucky: [
+    "눈에 잘 보이는 곳에 작은 행운 아이템을 하나 두세요.",
+    "망설이던 일을 아주 작게 시작해 보면 좋은 신호가 옵니다.",
+    "오늘의 좋은 타이밍은 천천히 살필수록 잘 보입니다."
+  ]
+};
+
+function makeNewCategoryDescription(
+  key: FortuneCategory["key"],
+  score: number,
+  person: Person,
+  dateKey: string
+) {
+  const seed = `${buildNewBaseSeed(person, dateKey)}|${key}|new-copy`;
+  const tone = newScoreTone(score);
+  const good = pick(categoryGoodLines[key], `${seed}|good`);
+  const caution = pick(categoryCautionLines[key], `${seed}|caution`);
+  const advice = pick(categoryAdviceLines[key], `${seed}|advice`);
+
+  return `${categoryLabels[categoryKeys.indexOf(key)]}은 ${tone} 흐름입니다. ${good}. 다만 ${caution}. ${advice}`;
+}
+
+function makeNewSummary(
+  person: Person,
+  dateKey: string,
+  keyword: string,
+  categoryScores: Record<FortuneCategory["key"], number>
+) {
+  const todayDate = formatKoreanDate(dateKey);
+  const orderedKeys = [...categoryKeys].sort(
+    (a, b) => categoryScores[b] - categoryScores[a]
+  );
+  const strongest = orderedKeys[0];
+  const softest = orderedKeys[orderedKeys.length - 1];
+  const seed = `${buildNewBaseSeed(person, dateKey)}|new-summary`;
+  const good = pick(categoryGoodLines[strongest], `${seed}|summary-good`);
+  const caution = pick(categoryCautionLines[softest], `${seed}|summary-caution`);
+  const advice = pick(categoryAdviceLines[softest], `${seed}|summary-advice`);
+
+  return `${todayDate}의 키워드는 ${keyword}입니다. 오늘은 ${good}. 특히 작은 제안이나 대화 속에서 뜻밖의 기회가 피어날 수 있습니다. 다만 ${caution}. ${advice}`;
+}
+
+function makeNewWinnerPraise(
+  person: Person,
+  dateKey: string,
+  keyword: string,
+  score: number
+) {
+  const todayDate = formatKoreanDate(dateKey);
+  return [
+    `${todayDate}은 ${person.name}님의 좋은 흐름이 또렷하게 살아나는 날입니다.`,
+    `종합점수 ${score}점은 다섯 가지 운세가 고르게 받쳐 준 결과예요.`,
+    `특히 ${keyword}의 분위기가 선명하니, 사람들 앞에서 존재감이 자연스럽게 빛날 수 있습니다.`,
+    `다만 좋은 흐름일수록 말과 선택을 한 번 더 다듬으면 오늘의 주인공다운 하루가 더 편안하게 이어집니다.`
+  ];
+}
+
+function makeNewRunnerUpMessage(
+  person: Person,
+  dateKey: string,
+  keyword: string,
+  score: number
+) {
+  const variants = [
+    `${person.name}님의 오늘은 ${keyword}의 흐름이 살아 있는 ${score}점의 하루입니다. 순위보다 중요한 것은 자기 페이스이니, 작은 선택을 차분히 이어가면 충분히 좋은 날이 됩니다.`,
+    `오늘은 아쉽게 주인공 자리를 살짝 비켜섰지만 ${keyword}의 기운은 분명히 있습니다. 무리하게 따라가기보다 잘 맞는 타이밍을 고르면 흐름이 안정됩니다.`,
+    `${score}점의 운세는 조심할 부분과 좋은 가능성이 함께 있는 신호입니다. 주변의 속도에 휩쓸리지 않고 필요한 말만 또렷하게 전해 보세요.`
+  ];
+
+  return pick(variants, `${person.id}|${dateKey}|new-runner`);
+}
+
+function calculateNewFortune(
+  person: Person,
+  dateKey = getLocalDateKey()
+): DailyFortune {
+  const base = buildNewBaseSeed(person, dateKey);
+  const energy = buildEnergy(person, dateKey);
+  const categoryScores = Object.fromEntries(
+    categoryKeys.map((key) => [
+      key,
+      scoreNewCategory(key, energy, `${base}|${key}|new-score`)
+    ])
+  ) as Record<FortuneCategory["key"], number>;
+  const score = calculateOverallScore(categoryScores);
+  const keyword = makeNewKeyword(person, dateKey, energy, categoryScores);
+  const categories = categoryKeys.map((key, index) => {
+    const categoryScore = categoryScores[key];
+    return {
+      key,
+      label: categoryLabels[index],
+      score: categoryScore,
+      description: makeNewCategoryDescription(
+        key,
+        categoryScore,
+        person,
+        dateKey
+      )
+    };
+  });
+
+  return {
+    person,
+    score,
+    categories,
+    keyword,
+    summary: makeNewSummary(person, dateKey, keyword, categoryScores),
+    energy,
+    winnerPraise: makeNewWinnerPraise(person, dateKey, keyword, score),
+    runnerUpMessage: makeNewRunnerUpMessage(person, dateKey, keyword, score)
+  };
+}
+
+export function calculateFortune(
+  person: Person,
+  dateKey = getLocalDateKey()
+): DailyFortune {
+  return shouldUseNewScoring(dateKey)
+    ? calculateNewFortune(person, dateKey)
+    : calculateLegacyFortune(person, dateKey);
 }
 
 export function rankFortunes(people: Person[], dateKey = getLocalDateKey()) {
