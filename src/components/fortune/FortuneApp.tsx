@@ -2491,12 +2491,13 @@ export function FortuneApp() {
                     <input
                       type="checkbox"
                       checked={form.privacyConsent}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        const privacyConsent = event.currentTarget.checked;
                         setForm((current) => ({
                           ...current,
-                          privacyConsent: event.currentTarget.checked
-                        }))
-                      }
+                          privacyConsent
+                        }));
+                      }}
                     />
                     <span>
                       입력한 정보는 ‘오늘의 주인공은?’ 앱의 운세 계산과 그룹방
