@@ -2,18 +2,36 @@ import { getApp, getApps, initializeApp, type FirebaseApp, type FirebaseOptions 
 import { getAuth, type Auth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
 
-const requiredFirebaseEnvKeys = [
-  "NEXT_PUBLIC_FIREBASE_API_KEY",
-  "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN",
-  "NEXT_PUBLIC_FIREBASE_PROJECT_ID",
-  "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET",
-  "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID",
-  "NEXT_PUBLIC_FIREBASE_APP_ID"
+const firebaseEnvValues = [
+  {
+    key: "NEXT_PUBLIC_FIREBASE_API_KEY",
+    value: process.env.NEXT_PUBLIC_FIREBASE_API_KEY
+  },
+  {
+    key: "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN",
+    value: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+  },
+  {
+    key: "NEXT_PUBLIC_FIREBASE_PROJECT_ID",
+    value: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+  },
+  {
+    key: "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET",
+    value: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+  },
+  {
+    key: "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID",
+    value: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+  },
+  {
+    key: "NEXT_PUBLIC_FIREBASE_APP_ID",
+    value: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
+  }
 ] as const;
 
-const missingFirebaseEnvKeys = requiredFirebaseEnvKeys.filter(
-  (key) => !process.env[key]
-);
+const missingFirebaseEnvKeys = firebaseEnvValues
+  .filter(({ value }) => !value)
+  .map(({ key }) => key);
 
 export const missingFirebaseConfigKeys = missingFirebaseEnvKeys;
 export const firebaseProjectId =
@@ -27,12 +45,12 @@ if (missingFirebaseEnvKeys.length > 0) {
 }
 
 const firebaseConfig: FirebaseOptions = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
+  apiKey: firebaseEnvValues[0].value,
+  authDomain: firebaseEnvValues[1].value,
+  projectId: firebaseEnvValues[2].value,
+  storageBucket: firebaseEnvValues[3].value,
+  messagingSenderId: firebaseEnvValues[4].value,
+  appId: firebaseEnvValues[5].value
 };
 
 export const hasFirebaseConfig = missingFirebaseEnvKeys.length === 0;
