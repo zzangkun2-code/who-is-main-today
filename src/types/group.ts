@@ -9,9 +9,8 @@ export type Member = Person & {
 export type GroupRoom = {
   roomNumber: string;
   /**
-   * localStorage 단계의 임시 필드입니다.
-   * 실제 Firebase, Google Sheets, 서버 DB 저장 시에는 평문 password 대신
-   * 서버에서 생성한 passwordHash만 저장해야 합니다.
+   * 현재 클라이언트 호환을 위해 password/passwordHash를 함께 지원합니다.
+   * 실제 운영에서는 평문 password 대신 서버에서 생성한 passwordHash만 저장해야 합니다.
    */
   password?: string;
   passwordHash?: string;

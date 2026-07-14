@@ -4,9 +4,11 @@ import {
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   setDoc,
   writeBatch,
-  type Firestore
+  type Firestore,
+  type Unsubscribe
 } from "firebase/firestore";
 import { getDefaultAvatarId, isAvatarIdForGender } from "@/lib/avatar";
 import { db } from "@/lib/firebase";
@@ -48,6 +50,8 @@ export type AdminGroupRoomSummary = GroupRoom & {
   memberCount: number;
 };
 
+export type StorageMode = "firestore" | "local";
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -80,6 +84,10 @@ function logFirestoreFallback(operation: string, error: unknown) {
     `[who-is-main-today Firebase] ${operation} failed. Falling back to localStorage.`,
     error
   );
+}
+
+export function hasFirestoreStorage() {
+  return Boolean(db);
 }
 
 function roomDocRef(database: Firestore, roomNumber: string) {
@@ -408,6 +416,90 @@ async function getFirestoreMembers(database: Firestore, roomNumber: string) {
     });
 }
 
+async function saveFirestoreMembers(
+  database: Firestore,
+  roomNumber: string,
+  members: Member[]
+) {
+  const normalized = normalizeRoomNumber(roomNumber);
+  const timestamp = nowIso();
+  const normalizedMembers = members
+    .map((member, index) => normalizeMember(member, normalized, index, timestamp))
+    .filter((member): member is Member => Boolean(member))
+    .map((member) => ({
+      ...member,
+      roomNumber: normalized,
+      updatedAt: member.updatedAt || timestamp
+    }));
+  const membersRef = membersCollectionRef(database, normalized);
+  const snapshot = await getDocs(membersRef);
+  const nextIds = new Set(normalizedMembers.map((member) => member.id));
+  const batch = writeBatch(database);
+
+  snapshot.docs.forEach((memberDoc) => {
+    if (!nextIds.has(memberDoc.id)) {
+      batch.delete(memberDoc.ref);
+    }
+  });
+
+  normalizedMembers.forEach((member) => {
+    batch.set(doc(membersRef, member.id), member, { merge: true });
+  });
+
+  await batch.commit();
+  return normalizedMembers;
+}
+
+export function subscribeRoomMembers(
+  roomNumber: string,
+  onMembers: (members: Member[]) => void,
+  onStatusChange?: (status: { mode: StorageMode; error?: unknown }) => void
+): Unsubscribe | null {
+  const normalized = normalizeRoomNumber(roomNumber);
+  if (!normalized) return null;
+
+  const database = getFirestoreForOperation("subscribe room members");
+  if (!database) {
+    onStatusChange?.({ mode: "local" });
+    return null;
+  }
+
+  try {
+    return onSnapshot(
+      membersCollectionRef(database, normalized),
+      (snapshot) => {
+        const members = snapshot.docs
+          .map((memberDoc, index) =>
+            normalizeMember(
+              { id: memberDoc.id, ...memberDoc.data() },
+              normalized,
+              index
+            )
+          )
+          .filter((member): member is Member => Boolean(member))
+          .sort((a, b) => {
+            if (a.createdAt !== b.createdAt) {
+              return a.createdAt.localeCompare(b.createdAt);
+            }
+            return a.name.localeCompare(b.name, "ko");
+          });
+
+        saveLocalMembers(normalized, members);
+        onStatusChange?.({ mode: "firestore" });
+        onMembers(members);
+      },
+      (error) => {
+        logFirestoreFallback("subscribe room members", error);
+        onStatusChange?.({ mode: "local", error });
+      }
+    );
+  } catch (error) {
+    logFirestoreFallback("subscribe room members", error);
+    onStatusChange?.({ mode: "local", error });
+    return null;
+  }
+}
+
 export async function checkRoomNumberAvailable(roomNumber: string) {
   const normalized = normalizeRoomNumber(roomNumber);
   if (!normalized) return false;
@@ -508,7 +600,23 @@ export async function getMembers(roomNumber: string) {
   if (database) {
     try {
       const members = await getFirestoreMembers(database, normalized);
-      saveLocalMembers(normalized, members);
+      if (members.length) {
+        saveLocalMembers(normalized, members);
+        return members;
+      }
+
+      const localMembers = getLocalMembers(normalized);
+      if (localMembers.length) {
+        const migratedMembers = await saveFirestoreMembers(
+          database,
+          normalized,
+          localMembers
+        );
+        saveLocalMembers(normalized, migratedMembers);
+        return migratedMembers;
+      }
+
+      saveLocalMembers(normalized, []);
       return members;
     } catch (error) {
       logFirestoreFallback("load members", error);
@@ -535,23 +643,12 @@ export async function saveMembers(roomNumber: string, members: Member[]) {
 
   if (database) {
     try {
-      const membersRef = membersCollectionRef(database, normalized);
-      const snapshot = await getDocs(membersRef);
-      const nextIds = new Set(normalizedMembers.map((member) => member.id));
-      const batch = writeBatch(database);
-
-      snapshot.docs.forEach((memberDoc) => {
-        if (!nextIds.has(memberDoc.id)) {
-          batch.delete(memberDoc.ref);
-        }
-      });
-
-      normalizedMembers.forEach((member) => {
-        batch.set(doc(membersRef, member.id), member, { merge: true });
-      });
-
-      await batch.commit();
-      saveLocalMembers(normalized, normalizedMembers);
+      const savedMembers = await saveFirestoreMembers(
+        database,
+        normalized,
+        normalizedMembers
+      );
+      saveLocalMembers(normalized, savedMembers);
       return true;
     } catch (error) {
       logFirestoreFallback("save members", error);

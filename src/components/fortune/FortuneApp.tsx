@@ -44,16 +44,20 @@ import {
 } from "@/lib/avatar";
 import {
   type AdminGroupRoomSummary,
+  addMember,
   checkRoomNumberAvailable,
   createGroupRoom,
   deleteGroupRoomForAdmin,
   deleteMember,
   getRoomMembersForAdmin,
   getMembers,
+  hasFirestoreStorage,
   listGroupRoomsForAdmin,
   loginGroupRoom,
   normalizeRoomNumber,
-  saveMembers
+  subscribeRoomMembers,
+  updateMember,
+  type StorageMode
 } from "@/lib/groupStorage";
 import type { GroupRoom, Member } from "@/types/group";
 
@@ -1256,6 +1260,10 @@ export function FortuneApp() {
   const [adminMembers, setAdminMembers] = useState<Member[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminError, setAdminError] = useState("");
+  const [storageMode, setStorageMode] = useState<StorageMode | "checking">(
+    "checking"
+  );
+  const [storageNotice, setStorageNotice] = useState("");
   const dateKey = useMemo(() => getLocalDateKey(), []);
 
   const previewFortunes = useMemo(
@@ -1286,6 +1294,72 @@ export function FortuneApp() {
       return latestPerson ? calculateFortune(latestPerson, dateKey) : null;
     });
   }, [people, dateKey]);
+
+  useEffect(() => {
+    const roomNumber = activeRoom?.roomNumber;
+    if (!roomNumber) {
+      setStorageMode("checking");
+      setStorageNotice("");
+      return;
+    }
+
+    let cancelled = false;
+    setStorageMode(hasFirestoreStorage() ? "checking" : "local");
+    setStorageNotice(
+      hasFirestoreStorage()
+        ? "서버 저장소와 연결을 확인하고 있어요."
+        : "임시 저장 모드입니다. Firebase 환경변수 또는 연결 상태를 확인해 주세요."
+    );
+
+    const loadFallbackMembers = async () => {
+      try {
+        const fallbackMembers = await getMembers(roomNumber);
+        if (!cancelled) {
+          setPeople(fallbackMembers);
+        }
+      } catch (loadError) {
+        console.error("[who-is-main-today Firebase] 후보 목록 fallback 불러오기 실패", loadError);
+        if (!cancelled) {
+          setError(getStorageUserMessage(loadError));
+        }
+      }
+    };
+
+    const unsubscribe = subscribeRoomMembers(
+      roomNumber,
+      (members) => {
+        if (cancelled) return;
+        setPeople(members);
+        setStorageMode("firestore");
+        setStorageNotice("서버 저장 모드: 같은 그룹방 사람들과 후보 목록을 공유합니다.");
+      },
+      (status) => {
+        if (cancelled) return;
+        if (status.mode === "firestore") {
+          setStorageMode("firestore");
+          setStorageNotice(
+            "서버 저장 모드: 같은 그룹방 사람들과 후보 목록을 공유합니다."
+          );
+          return;
+        }
+
+        setStorageMode("local");
+        setStorageNotice(
+          "임시 저장 모드: 현재 기기에만 저장됩니다. Firebase 환경변수와 Firestore Rules를 확인해 주세요."
+        );
+        void loadFallbackMembers();
+      }
+    );
+
+    if (!unsubscribe) {
+      void loadFallbackMembers();
+    }
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [activeRoom?.roomNumber]);
 
   function resetRoomUi() {
     setForm(emptyForm);
@@ -1383,25 +1457,6 @@ export function FortuneApp() {
     setAuthView("room");
     setAuthMessage("");
     resetRoomUi();
-  }
-
-  function updatePeople(updater: (current: Member[]) => Member[]) {
-    setPeople((current) => {
-      const next = updater(current);
-      if (activeRoom) {
-        const roomNumber = activeRoom.roomNumber;
-        void saveMembers(roomNumber, next).catch((storageError) => {
-          console.error("[Firestore] 후보 목록 저장 실패", storageError);
-          setError(
-            storageError instanceof Error
-              ? getStorageUserMessage(storageError)
-              : "후보 정보를 Firebase에 저장하지 못했습니다."
-          );
-          setPeople(current);
-        });
-      }
-      return next;
-    });
   }
 
   async function handleRoomAvailabilityCheck() {
@@ -1517,7 +1572,7 @@ export function FortuneApp() {
     resetRoomUi();
   }
 
-  function submitPerson(event: FormEvent<HTMLFormElement>) {
+  async function submitPerson(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     if (!activeRoom) {
@@ -1529,55 +1584,54 @@ export function FortuneApp() {
       return;
     }
 
-    if (editingId) {
-      updatePeople((current) =>
-        current.map((person) =>
-          person.id === editingId
-            ? (() => {
-                const name = form.name.trim();
-                const avatarId = isAvatarIdForGender(
-                  person.avatarId,
-                  form.gender
-                )
-                  ? person.avatarId
-                  : getDefaultAvatarId(form.gender, `${person.id}-${name}`);
+    try {
+      if (editingId) {
+        const currentPerson = people.find((person) => person.id === editingId);
+        if (!currentPerson) {
+          setError("수정할 후보를 찾지 못했습니다.");
+          return;
+        }
 
-                return {
-                  ...person,
-                  ...form,
-                  name,
-                  avatarId,
-                  roomNumber: activeRoom.roomNumber,
-                  updatedAt: new Date().toISOString()
-                };
-              })()
-            : person
-        )
-      );
-    } else {
-      const timestamp = new Date().toISOString();
-      const id =
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random()}`;
-      updatePeople((current) => [
-        ...current,
-        {
-          id,
-          roomNumber: activeRoom.roomNumber,
+        const name = form.name.trim();
+        const avatarId = isAvatarIdForGender(currentPerson.avatarId, form.gender)
+          ? currentPerson.avatarId
+          : getDefaultAvatarId(form.gender, `${currentPerson.id}-${name}`);
+        const savedMember = await updateMember(activeRoom.roomNumber, editingId, {
+          ...form,
+          name,
+          avatarId
+        });
+
+        if (savedMember) {
+          setPeople((current) =>
+            current.map((person) =>
+              person.id === editingId ? savedMember : person
+            )
+          );
+        }
+      } else {
+        const savedMember = await addMember(activeRoom.roomNumber, {
           ...form,
           name: form.name.trim(),
           avatarId: getDefaultAvatarId(
             form.gender,
-            `${id}-${form.name.trim()}-${current.length}`
-          ),
-          createdAt: timestamp,
-          updatedAt: timestamp
-        }
-      ]);
+            `${activeRoom.roomNumber}-${form.name.trim()}-${people.length}`
+          )
+        });
+
+        setPeople((current) =>
+          current.some((person) => person.id === savedMember.id)
+            ? current
+            : [...current, savedMember]
+        );
+      }
+
+      setForm(emptyForm);
+      setEditingId(null);
+    } catch (storageError) {
+      console.error("[who-is-main-today Firebase] 후보 저장 실패", storageError);
+      setError(getStorageUserMessage(storageError));
     }
-    setForm(emptyForm);
-    setEditingId(null);
   }
 
   function editPerson(person: Person) {
@@ -1594,17 +1648,17 @@ export function FortuneApp() {
       ?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
-  function deletePerson(id: string) {
-    updatePeople((current) => current.filter((person) => person.id !== id));
-    if (activeRoom) {
-      void deleteMember(activeRoom.roomNumber, id).catch((storageError) => {
-        console.error("[Firestore] 후보 삭제 실패", storageError);
-        setError(
-          storageError instanceof Error
-            ? getStorageUserMessage(storageError)
-            : "후보 정보를 Firebase에서 삭제하지 못했습니다."
-        );
-      });
+  async function deletePerson(id: string) {
+    if (!activeRoom) return;
+
+    const previousPeople = people;
+    setPeople((current) => current.filter((person) => person.id !== id));
+    try {
+      await deleteMember(activeRoom.roomNumber, id);
+    } catch (storageError) {
+      console.error("[who-is-main-today Firebase] 후보 삭제 실패", storageError);
+      setPeople(previousPeople);
+      setError(getStorageUserMessage(storageError));
     }
     if (editingId === id) {
       setForm(emptyForm);
@@ -1612,23 +1666,31 @@ export function FortuneApp() {
     }
   }
 
-  function selectAvatar(avatarId: string) {
-    if (!avatarTarget || !isAvatarIdForGender(avatarId, avatarTarget.gender)) {
+  async function selectAvatar(avatarId: string) {
+    if (
+      !activeRoom ||
+      !avatarTarget ||
+      !isAvatarIdForGender(avatarId, avatarTarget.gender)
+    ) {
       return;
     }
 
-    updatePeople((current) =>
-      current.map((person) =>
-        person.id === avatarTarget.id
-          ? {
-              ...person,
-              avatarId,
-              updatedAt: new Date().toISOString()
-            }
-          : person
-      )
-    );
-    setAvatarTargetId(null);
+    try {
+      const savedMember = await updateMember(activeRoom.roomNumber, avatarTarget.id, {
+        avatarId
+      });
+      if (savedMember) {
+        setPeople((current) =>
+          current.map((person) =>
+            person.id === avatarTarget.id ? savedMember : person
+          )
+        );
+      }
+      setAvatarTargetId(null);
+    } catch (storageError) {
+      console.error("[who-is-main-today Firebase] 캐릭터 저장 실패", storageError);
+      setError(getStorageUserMessage(storageError));
+    }
   }
 
   function openPersonFortune(person: Person) {
@@ -2157,6 +2219,23 @@ export function FortuneApp() {
               <CalendarDays className="h-4 w-4" />
               {formatKoreanDate(dateKey)}
             </div>
+            <div
+              className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold ${
+                storageMode === "firestore"
+                  ? "bg-[#e9fff3] text-[#21724a]"
+                  : storageMode === "local"
+                    ? "bg-[#fff0f2] text-[#b4435d]"
+                    : "bg-[#edf3ff] text-[#4c63a8]"
+              }`}
+              title={storageNotice}
+            >
+              <Sparkles className="h-4 w-4" />
+              {storageMode === "firestore"
+                ? "서버 저장 모드"
+                : storageMode === "local"
+                  ? "임시 저장 모드"
+                  : "저장소 확인 중"}
+            </div>
             <button
               type="button"
               onClick={leaveRoom}
@@ -2166,6 +2245,18 @@ export function FortuneApp() {
             </button>
           </div>
         </header>
+
+        {storageNotice ? (
+          <p
+            className={`mt-3 rounded-2xl px-4 py-3 text-sm font-bold shadow-sm ${
+              storageMode === "local"
+                ? "bg-[#fff0f2] text-[#b4435d]"
+                : "bg-white/70 text-[#75698c]"
+            }`}
+          >
+            {storageNotice}
+          </p>
+        ) : null}
 
         <section className="px-2 pb-9 pt-12 text-center sm:pb-12 sm:pt-16">
           <div className="mx-auto mb-5 flex w-fit items-center gap-2 rounded-full border border-[#dbcafb] bg-white/75 px-4 py-2 text-xs font-black text-[#7b55b5] shadow-sm">
@@ -2368,7 +2459,7 @@ export function FortuneApp() {
                       key={person.id}
                       person={person}
                       onEdit={() => editPerson(person)}
-                      onDelete={() => deletePerson(person.id)}
+                      onDelete={() => void deletePerson(person.id)}
                       onFortune={() => openPersonFortune(person)}
                       onAvatarSelect={() => setAvatarTargetId(person.id)}
                     />
