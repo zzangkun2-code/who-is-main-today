@@ -592,7 +592,6 @@ body {
   white-space: nowrap;
 }
 
-.candidate-age,
 .candidate-meta-row span {
   white-space: nowrap;
 }
@@ -615,11 +614,6 @@ body {
   border-radius: 999px;
   background: #f8f4fb;
   padding: 0.25rem 0.55rem;
-}
-
-.candidate-zodiac {
-  background: #fff6df !important;
-  color: #795e22;
 }
 
 .candidate-actions {

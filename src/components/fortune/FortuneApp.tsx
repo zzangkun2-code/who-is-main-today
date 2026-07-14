@@ -31,9 +31,7 @@ import {
   Person,
   calculateFortune,
   formatKoreanDate,
-  getAge,
   getLocalDateKey,
-  getZodiacInfo,
   rankFortunes
 } from "@/lib/fortune";
 import {
@@ -111,18 +109,6 @@ function normalizeBirthTime(value: unknown) {
   if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return "";
 
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-}
-
-function formatBirthCompact(birthDate: string) {
-  const [year, month, day] = birthDate.split("-");
-  return `${year.slice(2)}${month}${day}`;
-}
-
-function formatTimeLabel(birthTime: string, birthTimeUnknown = false) {
-  if (birthTimeUnknown || birthTime === "unknown") return "시간 잘 모름";
-  const [hour, minute] = birthTime.split(":");
-  if (!hour || !minute) return "시간 잘 모름";
-  return `${Number(hour)}시 ${minute}분`;
 }
 
 function formatDateTime(value?: string) {
@@ -222,9 +208,6 @@ function Character({
   size?: "small" | "normal" | "large";
   crowned?: boolean;
 }) {
-  const age = getAge(person.birthDate);
-  const young = age < 18;
-  const mature = age >= 55;
   const avatar = getAvatarById(
     person.avatarId,
     person.gender,
@@ -240,6 +223,10 @@ function Character({
   const gradientId =
     `outfit-${person.id}-${avatar.id}`.replace(/[^a-zA-Z0-9]/g, "") ||
     "outfit-avatar";
+  const useFullHair =
+    avatar.hairStyle === "long" ||
+    avatar.hairStyle === "bob" ||
+    avatar.hairStyle === "wave";
   const femaleHairBase =
     avatar.hairStyle === "bob"
       ? "M47 70c-4-28 12-48 34-48 25 0 39 20 35 51l-8 27H54z"
@@ -269,9 +256,7 @@ function Character({
       ? "M74 86q6 4 12 0"
       : avatar.mood === "bright"
         ? "M72 84q8 11 18 0"
-        : young
-          ? "M73 85q7 7 14 0"
-          : "M72 85q8 9 16 0";
+        : "M72 85q8 9 16 0";
 
   return (
     <div
@@ -301,7 +286,7 @@ function Character({
           d="M68 101h24v17c-7 6-17 6-24 0z"
           fill="#F6BE9B"
         />
-        {person.gender === "female" ? (
+        {useFullHair ? (
           <path
             d={femaleHairBase}
             fill={colors.hair}
@@ -313,7 +298,7 @@ function Character({
           />
         )}
         <ellipse cx="80" cy="70" rx="30" ry="34" fill={colors.skin} />
-        {person.gender === "female" ? (
+        {useFullHair ? (
           <>
             <path
               d={femaleFrontHair}
@@ -384,7 +369,7 @@ function Character({
         ) : null}
         {avatar.mood === "wink" ? (
           <>
-            <ellipse cx="68" cy="71" rx="3.4" ry={mature ? 2.5 : 4} fill="#40364C" />
+            <ellipse cx="68" cy="71" rx="3.4" ry="4" fill="#40364C" />
             <path d="M88 71q5 4 10 0" fill="none" stroke="#40364C" strokeLinecap="round" strokeWidth="2.4" />
             <circle cx="67" cy="69.5" r="1" fill="white" />
           </>
@@ -394,8 +379,8 @@ function Character({
           </>
         ) : (
           <>
-            <ellipse cx="68" cy="71" rx="3.4" ry={mature ? 2.5 : 4} fill="#40364C" />
-            <ellipse cx="93" cy="71" rx="3.4" ry={mature ? 2.5 : 4} fill="#40364C" />
+            <ellipse cx="68" cy="71" rx="3.4" ry="4" fill="#40364C" />
+            <ellipse cx="93" cy="71" rx="3.4" ry="4" fill="#40364C" />
             <circle cx="67" cy="69.5" r="1" fill="white" />
             <circle cx="92" cy="69.5" r="1" fill="white" />
           </>
@@ -416,12 +401,6 @@ function Character({
         />
         <circle cx="57" cy="81" r="5" fill="#FF9FAB" opacity=".35" />
         <circle cx="103" cy="81" r="5" fill="#FF9FAB" opacity=".35" />
-        {mature ? (
-          <>
-            <path d="M61 63q7-3 13 0M86 63q7-3 13 0" fill="none" stroke="#8C7184" strokeWidth="1.5" />
-            <path d="M74 91q6 3 12 0" fill="none" stroke="#DE9E8F" strokeWidth="1" />
-          </>
-        ) : null}
         <path
           d="M62 115l18 15 18-15 12 33H50z"
           fill="white"
@@ -945,9 +924,6 @@ function PersonCard({
   onFortune: () => void;
   onAvatarSelect: () => void;
 }) {
-  const zodiac = getZodiacInfo(person.birthDate);
-  const genderLabel = person.gender === "female" ? "여성" : "남성";
-
   return (
     <article className="candidate-card group relative overflow-hidden rounded-[26px] border border-white bg-white p-4 shadow-[0_14px_40px_rgba(98,75,135,.09)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_48px_rgba(98,75,135,.15)] sm:p-5">
       <div className="absolute -right-5 -top-7 h-24 w-24 rounded-full bg-[#fff1bc]/60 blur-sm" />
@@ -972,16 +948,9 @@ function PersonCard({
                 {person.name}
               </h3>
             </button>
-            <span className="candidate-age text-sm font-extrabold text-[#8f82a1]">
-              ({getAge(person.birthDate)}세 · {formatBirthCompact(person.birthDate)})
-            </span>
           </div>
           <div className="candidate-meta-row">
-            <span>{genderLabel}</span>
-            <span>{formatTimeLabel(person.birthTime, person.birthTimeUnknown)}</span>
-            <span className="candidate-zodiac">
-              {zodiac.emoji} {zodiac.name}띠
-            </span>
+            <span>운세 계산 정보는 비공개</span>
           </div>
           <button
             type="button"
@@ -1663,11 +1632,16 @@ export function FortuneApp() {
       setError("먼저 그룹방에 입장해 주세요.");
       return;
     }
-    if (!form.name.trim() || !form.birthDate || (!form.birthTimeUnknown && !form.birthTime)) {
+    if (!form.name.trim()) {
+      setError("이름을 입력해 주세요.");
+      return;
+    }
+
+    if (!editingId && (!form.birthDate || (!form.birthTimeUnknown && !form.birthTime))) {
       setError("이름, 생년월일, 태어난 시간을 모두 알려주세요.");
       return;
     }
-    if (!form.privacyConsent) {
+    if (!editingId && !form.privacyConsent) {
       setError("개인정보 활용 안내에 동의해야 후보를 추가하거나 수정할 수 있어요.");
       return;
     }
@@ -1688,13 +1662,8 @@ export function FortuneApp() {
           return;
         }
 
-        const name = memberPayload.name;
-        const avatarId = isAvatarIdForGender(currentPerson.avatarId, form.gender)
-          ? currentPerson.avatarId
-          : getDefaultAvatarId(form.gender, `${currentPerson.id}-${name}`);
         const savedMember = await updateMember(activeRoom.roomNumber, editingId, {
-          ...memberPayload,
-          avatarId
+          name: form.name.trim()
         });
 
         if (savedMember) {
@@ -1909,15 +1878,9 @@ export function FortuneApp() {
                               {member.name}
                             </h3>
                             <div className="mt-2 grid gap-1 text-sm font-bold leading-6 text-[#786c84]">
-                              <p>성별: {member.gender === "female" ? "여성" : "남성"}</p>
-                              <p>생년월일: {member.birthDate}</p>
-                              <p>
-                                생시:{" "}
-                                {formatTimeLabel(
-                                  member.birthTime,
-                                  member.birthTimeUnknown
-                                )}
-                              </p>
+                              <p>성별: 비공개</p>
+                              <p>생년월일: ****-**-**</p>
+                              <p>생시: 비공개</p>
                               <p>캐릭터: {member.avatarId ?? "-"}</p>
                               <p>생성일: {formatDateTime(member.createdAt)}</p>
                               <p>수정일: {formatDateTime(member.updatedAt)}</p>
@@ -2423,7 +2386,9 @@ export function FortuneApp() {
                   {editingId ? "후보 정보 수정" : "새 후보 등록"}
                 </h3>
                 <p className="mt-1 text-sm font-medium text-[#91869f]">
-                  태어난 시간이 정확할수록 별빛도 또렷해져요.
+                  {editingId
+                    ? "개인정보 보호를 위해 이름만 수정할 수 있어요."
+                    : "생년월일과 태어난 시간은 운세 계산에만 사용돼요."}
                 </p>
               </div>
 
@@ -2447,69 +2412,73 @@ export function FortuneApp() {
                   </span>
                 </label>
 
-                <fieldset>
-                  <legend className="mb-2 text-sm font-black text-[#5a4c6c]">
-                    성별
-                  </legend>
-                  <div className="grid grid-cols-2 gap-3">
-                    {(
-                      [
-                        ["female", "여성", "🌸"],
-                        ["male", "남성", "🌿"]
-                      ] as const
-                    ).map(([value, label, emoji]) => (
-                      <label
-                        key={value}
-                        className={`focus-within:ring-2 focus-within:ring-[#b996e7] flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-2xl border text-sm font-black transition ${
-                          form.gender === value
-                            ? "border-[#a77bdc] bg-[#f4edff] text-[#7045a8]"
-                            : "border-[#ebe5ef] bg-white text-[#81768d] hover:border-[#d6c4e8]"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="gender"
-                          value={value}
-                          checked={form.gender === value}
-                          onChange={() => setForm({ ...form, gender: value })}
-                          className="sr-only"
-                        />
-                        <span>{emoji}</span>
-                        {label}
-                        {form.gender === value ? (
-                          <Check className="h-4 w-4" />
-                        ) : null}
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
+                {!editingId ? (
+                  <>
+                    <fieldset>
+                      <legend className="mb-2 text-sm font-black text-[#5a4c6c]">
+                        성별
+                      </legend>
+                      <div className="grid grid-cols-2 gap-3">
+                        {(
+                          [
+                            ["female", "여성", "🌸"],
+                            ["male", "남성", "🌿"]
+                          ] as const
+                        ).map(([value, label, emoji]) => (
+                          <label
+                            key={value}
+                            className={`focus-within:ring-2 focus-within:ring-[#b996e7] flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-2xl border text-sm font-black transition ${
+                              form.gender === value
+                                ? "border-[#a77bdc] bg-[#f4edff] text-[#7045a8]"
+                                : "border-[#ebe5ef] bg-white text-[#81768d] hover:border-[#d6c4e8]"
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="gender"
+                              value={value}
+                              checked={form.gender === value}
+                              onChange={() => setForm({ ...form, gender: value })}
+                              className="sr-only"
+                            />
+                            <span>{emoji}</span>
+                            {label}
+                            {form.gender === value ? (
+                              <Check className="h-4 w-4" />
+                            ) : null}
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
 
-                <div className="grid gap-4">
-                  <BirthDatePicker
-                    value={form.birthDate}
-                    maxDate={dateKey}
-                    onChange={(birthDate) =>
-                      setForm((current) => ({ ...current, birthDate }))
-                    }
-                  />
-                  <BirthTimePicker
-                    value={form.birthTime}
-                    unknown={form.birthTimeUnknown}
-                    onUnknownChange={(birthTimeUnknown) =>
-                      setForm((current) => ({
-                        ...current,
-                        birthTimeUnknown
-                      }))
-                    }
-                    onChange={(birthTime) =>
-                      setForm((current) => ({
-                        ...current,
-                        birthTime,
-                        birthTimeUnknown: false
-                      }))
-                    }
-                  />
-                </div>
+                    <div className="grid gap-4">
+                      <BirthDatePicker
+                        value={form.birthDate}
+                        maxDate={dateKey}
+                        onChange={(birthDate) =>
+                          setForm((current) => ({ ...current, birthDate }))
+                        }
+                      />
+                      <BirthTimePicker
+                        value={form.birthTime}
+                        unknown={form.birthTimeUnknown}
+                        onUnknownChange={(birthTimeUnknown) =>
+                          setForm((current) => ({
+                            ...current,
+                            birthTimeUnknown
+                          }))
+                        }
+                        onChange={(birthTime) =>
+                          setForm((current) => ({
+                            ...current,
+                            birthTime,
+                            birthTimeUnknown: false
+                          }))
+                        }
+                      />
+                    </div>
+                  </>
+                ) : null}
 
                 {error ? (
                   <p className="rounded-2xl bg-[#fff0f2] px-4 py-3 text-sm font-bold text-[#cb5771]">
@@ -2517,23 +2486,25 @@ export function FortuneApp() {
                   </p>
                 ) : null}
 
-                <label className="privacy-consent-card focus-within:ring-2 focus-within:ring-[#b996e7]">
-                  <input
-                    type="checkbox"
-                    checked={form.privacyConsent}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        privacyConsent: event.currentTarget.checked
-                      }))
-                    }
-                  />
-                  <span>
-                    입력한 이름, 성별, 생년월일, 태어난 시간 개인정보는
-                    ‘오늘의 주인공은?’ 앱 이용을 위한 운세 계산 및 그룹방 공유
-                    기능에만 사용됩니다.
-                  </span>
-                </label>
+                {!editingId ? (
+                  <label className="privacy-consent-card focus-within:ring-2 focus-within:ring-[#b996e7]">
+                    <input
+                      type="checkbox"
+                      checked={form.privacyConsent}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          privacyConsent: event.currentTarget.checked
+                        }))
+                      }
+                    />
+                    <span>
+                      입력한 정보는 ‘오늘의 주인공은?’ 앱의 운세 계산과 그룹방
+                      공유 기능에만 사용되며, 생년월일과 태어난 시간은 후보 생성
+                      후 화면에 표시되지 않습니다.
+                    </span>
+                  </label>
+                ) : null}
 
                 <div className="flex gap-3">
                   {editingId ? (
@@ -2551,7 +2522,7 @@ export function FortuneApp() {
                   ) : null}
                   <button
                     type="submit"
-                    disabled={!form.privacyConsent}
+                    disabled={!editingId && !form.privacyConsent}
                     className="focus-ring flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[#58436f] px-6 text-sm font-black text-white shadow-[0_12px_25px_rgba(75,52,99,.22)] transition hover:-translate-y-0.5 hover:bg-[#6c4f89] disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     {editingId ? (
